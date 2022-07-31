@@ -12,7 +12,7 @@ type BaseQueueName = string;
 type BaseArguments<T extends BaseQueueName> = Record<T, any>;
 type BaseReturns<T extends BaseQueueName> = Record<T, any>;
 
-type ConsumeFunction<T = void> = (message: amqp.Message | null) => T;
+type ConsumeFunction<T = void> = (message: amqp.Message | null) => T | Promise<T>;
 type SendToQueueMessage = any;
 
 type Queues<T extends BaseSendersReceivers> = Record<string, IQueue<T[keyof T]>>;
@@ -140,6 +140,14 @@ interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
     message: SendToQueueMessage,
     routingKey: string,
   ) => void;
+}
+
+const isPromise = (value: any) => {
+  if (typeof value === 'object' && typeof value.then === 'function') {
+    return true;
+  }
+
+  return false;
 }
 
 class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
@@ -470,11 +478,13 @@ export default class RabbitMQClient {
 
     return this.createReceiver(
       queueName,
-      (message) => {
+      async (message) => {
         if (message?.properties.replyTo != null) {
+          const consumeReturn = consumeFunction(message);
+
           currentChannel.sendToQueue(
             message.properties.replyTo,
-            consumeFunction(message),
+            isPromise(consumeReturn) ? await consumeReturn : consumeReturn,
             {
               correlationId: message.properties.correlationId,
             },
