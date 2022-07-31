@@ -12,7 +12,6 @@ type BaseQueueName = string;
 type BaseArguments<T extends BaseQueueName> = Record<T, any>;
 type BaseReturns<T extends BaseQueueName> = Record<T, any>;
 
-type ConsumeFunction<T = void> = (message: amqp.Message | null) => T | Promise<T>;
 type SendToQueueMessage = any;
 
 type Queues<T extends BaseSendersReceivers> = Record<string, IQueue<T[keyof T]>>;
@@ -97,7 +96,7 @@ interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
   send: T['send'];
   sendRPC: T['sendRPC'];
   setConsume: (
-    consumeFunction: T['consume'],
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consume']>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
 }
@@ -469,7 +468,12 @@ export default class RabbitMQClient {
     if (prefetch != null) {
       currentChannel.channel.prefetch(1);
     }
-    await queue.setConsume(consumeFunction, { noAck: true });
+    await queue.setConsume((message) => {
+      if (message == null) {
+        return;
+      }
+      return consumeFunction(toParsedMessage<Parameters<typeof consumeFunction>[0]>(message));
+    }, { noAck: true });
     return {
       channel: currentChannel,
       queue,
@@ -489,7 +493,8 @@ export default class RabbitMQClient {
       queueName,
       async (message) => {
         if (message?.properties.replyTo != null) {
-          const consumeReturn = consumeFunction(JSON.parse(message?.content.toString() || ''));
+          const parsedMessage = toParsedMessage<Parameters<typeof consumeFunction>[0]>(message);
+          const consumeReturn = consumeFunction(parsedMessage);
 
           currentChannel.sendToQueue(
             message.properties.replyTo,
@@ -505,17 +510,17 @@ export default class RabbitMQClient {
     );
   };
 
-  static createReceiverRPCJson = <T extends BaseSendersReceiversRPC>(
-    queueName: keyof T,
-    consumeFunction: T[typeof queueName]['consume'],
-    prefetch?: number,
-    channel?: IChannel<T>,
-  ) => this.createReceiverRPC<T>(
-    queueName,
-    consumeFunction,
-    prefetch,
-    channel,
-  );
+  // static createReceiverRPCJson = <T extends BaseSendersReceiversRPC>(
+  //   queueName: keyof T,
+  //   consumeFunction: T[typeof queueName]['consume'],
+  //   prefetch?: number,
+  //   channel?: IChannel<T>,
+  // ) => this.createReceiverRPC<T>(
+  //   queueName,
+  //   consumeFunction,
+  //   prefetch,
+  //   channel,
+  // );
 
   static createSubscriber = async <T extends BaseSendersReceivers>(
     exchangeName: keyof T,
