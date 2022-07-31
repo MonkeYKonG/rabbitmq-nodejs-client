@@ -20,6 +20,10 @@ type Queues<T extends BaseSendersReceivers> = Record<string, IQueue<T[keyof T]>>
 type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
 type Exchanges<T extends BaseSendersReceivers> = Record<string, IExchange<T[keyof T]>>;
 
+type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
+  content: T
+};
+
 export type BaseMessageArguments<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
   [key in QueueNames]: Arguments[key];
 };
@@ -42,13 +46,13 @@ export type BaseSendRPCFunction<QueueNames extends string, Arguments extends Bas
 
 export type BaseConsumeFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
   [key in QueueNames]: (
-    message: BaseMessageArguments<QueueNames, Arguments>[key],
+    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]> | null,
   ) => void | Promise<void> | any | Promise<any>;
 };
 
 export type BaseConsumeRPCFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames>> = {
   [key in QueueNames]: (
-    message: BaseMessageArguments<QueueNames, Arguments>[key],
+    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]> | null,
   ) => BaseMessageReturn<QueueNames, Returns>[key] | Promise<BaseMessageReturn<QueueNames, Returns>[key]>;
 };
 
@@ -124,9 +128,9 @@ interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
     pattern: string,
     args?: any,
   ) => Promise<void>;
-  consumeQueue: <U extends keyof T, Return = void>(
+  consumeQueue: <U extends keyof T>(
     queueName: U,
-    consumeFunction: ConsumeFunction<Return>,
+    consumeFunction: T[U]['consume'],
     options?: amqp.Options.Consume,
   ) => Promise<void>;
   sendToQueue: <U extends keyof T>(
@@ -149,6 +153,11 @@ const isPromise = (value: any) => {
 
   return false;
 }
+
+const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
+  ...message,
+  content: JSON.parse(message.content.toString()),
+});
 
 class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
   declare channel;
@@ -480,7 +489,7 @@ export default class RabbitMQClient {
       queueName,
       async (message) => {
         if (message?.properties.replyTo != null) {
-          const consumeReturn = consumeFunction(message);
+          const consumeReturn = consumeFunction(JSON.parse(message?.content.toString() || ''));
 
           currentChannel.sendToQueue(
             message.properties.replyTo,
@@ -503,7 +512,7 @@ export default class RabbitMQClient {
     channel?: IChannel<T>,
   ) => this.createReceiverRPC<T>(
     queueName,
-    (msg) => consumeFunction(JSON.parse(msg?.content.toString() || '')),
+    consumeFunction,
     prefetch,
     channel,
   );
@@ -511,7 +520,7 @@ export default class RabbitMQClient {
   static createSubscriber = async <T extends BaseSendersReceivers>(
     exchangeName: keyof T,
     exchangeType: ExchangeTypes,
-    consumeFunction: ConsumeFunction,
+    consumeFunction: T[typeof exchangeName]['consume'],
     patterns: string[] = [''],
     channel?: IChannel<T>,
   ) => {
