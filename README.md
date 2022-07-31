@@ -1,5 +1,3 @@
-__TOC__
-
 # Description
 Quick and easy client for contacting RabbitMQ server.
 # Installation
