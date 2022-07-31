@@ -15,10 +15,10 @@ type BaseReturns<T extends BaseQueueName> = Record<T, any>;
 type ConsumeFunction<T = void> = (message: amqp.Message | null) => T;
 type SendToQueueMessage = any;
 
-type Queues<T extends BaseSenders> = Record<string, IQueue<T[keyof T]>>;
+type Queues<T extends BaseSendersReceivers> = Record<string, IQueue<T[keyof T]>>;
 
 type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
-type Exchanges<T extends BaseSenders> = Record<string, IExchange<T[keyof T]>>;
+type Exchanges<T extends BaseSendersReceivers> = Record<string, IExchange<T[keyof T]>>;
 
 export type BaseMessageArguments<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
   [key in QueueNames]: Arguments[key];
@@ -59,7 +59,7 @@ export type BasePublishFunction<QueueNames extends string, Arguments extends Bas
   ) => void;
 }
 
-type BaseSender<QueueNames extends string = string, Q extends QueueNames = QueueNames, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames> = BaseReturns<QueueNames>> = {
+type BaseSenderReceiver<QueueNames extends string = string, Q extends QueueNames = QueueNames, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames> = BaseReturns<QueueNames>> = {
   queueName: Q,
   sendRPC: BaseSendRPCFunction<QueueNames, Arguments, Returns>[Q];
   send: BaseSendFunction<QueueNames, Arguments>[Q];
@@ -67,7 +67,7 @@ type BaseSender<QueueNames extends string = string, Q extends QueueNames = Queue
   publish: BasePublishFunction<QueueNames, Arguments>[Q];
 };
 
-export type BaseSenders<QueueNames extends string = string, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>> = {
+export type BaseSendersReceivers<QueueNames extends string = string, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>> = {
   [key in QueueNames]: {
     queueName: key,
     sendRPC: BaseSendFunction<QueueNames, Arguments>[key];
@@ -77,7 +77,7 @@ export type BaseSenders<QueueNames extends string = string, Arguments extends Ba
   }
 };
 
-export type BaseSendersRPC<QueueNames extends string = string, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames> = BaseReturns<QueueNames>> = {
+export type BaseSendersReceiversRPC<QueueNames extends string = string, Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames> = BaseReturns<QueueNames>> = {
   [key in QueueNames]: {
     queueName: key,
     sendRPC: BaseSendRPCFunction<QueueNames, Arguments, Returns>[key];
@@ -87,7 +87,7 @@ export type BaseSendersRPC<QueueNames extends string = string, Arguments extends
   }
 };
 
-interface IQueue<T extends BaseSender = BaseSender> {
+interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
   channel: IChannel;
   name: T['queueName'];
   send: T['send'];
@@ -98,13 +98,13 @@ interface IQueue<T extends BaseSender = BaseSender> {
   ) => Promise<void>;
 }
 
-interface IExchange<T extends BaseSender> {
+interface IExchange<T extends BaseSenderReceiver> {
   channel: IChannel;
   name: T['queueName'];
   publish: T['publish'];
 }
 
-interface IChannel<T extends BaseSenders = BaseSenders> {
+interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
   channel: amqp.Channel;
   queues: Queues<T>;
   exchanges: Exchanges<T>;
@@ -142,7 +142,7 @@ interface IChannel<T extends BaseSenders = BaseSenders> {
   ) => void;
 }
 
-class Queue<T extends BaseSender> implements IQueue<T> {
+class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
   declare channel;
 
   declare name;
@@ -179,7 +179,7 @@ class Queue<T extends BaseSender> implements IQueue<T> {
   ) => this.channel.consumeQueue(this.name, consumeFunction, options);
 }
 
-class Exchange<T extends BaseSender> implements IExchange<T> {
+class Exchange<T extends BaseSenderReceiver> implements IExchange<T> {
   declare channel;
 
   declare name;
@@ -194,7 +194,7 @@ class Exchange<T extends BaseSender> implements IExchange<T> {
   };
 }
 
-class Channel<T extends BaseSenders> implements IChannel<T> {
+class Channel<T extends BaseSendersReceivers> implements IChannel<T> {
   declare channel;
 
   declare queues: IChannel<T>['queues'];
@@ -387,7 +387,7 @@ export default class RabbitMQClient {
     });
   });
 
-  private static privateCreateChannel = <T extends BaseSenders>() => new Promise<Channel<T>>((resolve) => {
+  private static privateCreateChannel = <T extends BaseSendersReceivers>() => new Promise<Channel<T>>((resolve) => {
     connection?.createChannel((error, channel) => {
       if (error) throw error;
 
@@ -395,14 +395,14 @@ export default class RabbitMQClient {
     });
   });
 
-  static createChannel = async <T extends BaseSenders>(): Promise<Channel<T>> => {
+  static createChannel = async <T extends BaseSendersReceivers>(): Promise<Channel<T>> => {
     if (this.isDisconnected()) {
       await this.connect();
     }
     return this.privateCreateChannel<T>();
   };
 
-  static createSender = async<T extends BaseSenders>(
+  static createSender = async<T extends BaseSendersReceivers>(
     queueName: keyof T,
     channel?: IChannel<T>,
   ) => {
@@ -416,7 +416,7 @@ export default class RabbitMQClient {
     };
   };
 
-  static createPublisher = async <T extends BaseSenders>(
+  static createPublisher = async <T extends BaseSendersReceivers>(
     exchangeName: keyof T,
     exchangeType: ExchangeTypes,
     channel?: IChannel<T>,
@@ -439,7 +439,7 @@ export default class RabbitMQClient {
     };
   };
 
-  static createReceiver = async <T extends BaseSenders>(
+  static createReceiver = async <T extends BaseSendersReceivers>(
     queueName: keyof T,
     consumeFunction: ConsumeFunction,
     prefetch?: number,
@@ -459,7 +459,7 @@ export default class RabbitMQClient {
     };
   };
 
-  static createReceiverRPC = async <T extends BaseSenders>(
+  static createReceiverRPC = async <T extends BaseSendersReceivers>(
     queueName: keyof T,
     consumeFunction: ConsumeFunction<SendToQueueMessage>,
     prefetch?: number,
@@ -485,7 +485,7 @@ export default class RabbitMQClient {
     );
   };
 
-  static createReceiverRPCJson = <T extends BaseSendersRPC>(
+  static createReceiverRPCJson = <T extends BaseSendersReceiversRPC>(
     queueName: keyof T,
     consumeFunction: T[typeof queueName]['consume'],
     prefetch?: number,
@@ -497,7 +497,7 @@ export default class RabbitMQClient {
     channel,
   );
 
-  static createSubscriber = async <T extends BaseSenders>(
+  static createSubscriber = async <T extends BaseSendersReceivers>(
     exchangeName: keyof T,
     exchangeType: ExchangeTypes,
     consumeFunction: ConsumeFunction,
