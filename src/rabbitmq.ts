@@ -43,13 +43,13 @@ export type BaseSendRPCFunction<QueueNames extends string, Arguments extends Bas
 export type BaseConsumeFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
   [key in QueueNames]: (
     message: BaseMessageArguments<QueueNames, Arguments>[key],
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 export type BaseConsumeRPCFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames>> = {
   [key in QueueNames]: (
     message: BaseMessageArguments<QueueNames, Arguments>[key],
-  ) => BaseMessageReturn<QueueNames, Returns>[key];
+  ) => BaseMessageReturn<QueueNames, Returns>[key] | Promise<BaseMessageReturn<QueueNames, Returns>[key]>;
 };
 
 export type BasePublishFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
