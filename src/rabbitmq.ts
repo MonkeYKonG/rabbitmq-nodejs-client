@@ -367,8 +367,9 @@ export default class RabbitMQClient {
 
   static isDisconnected = () => connection == null;
 
-  static connect = () => new Promise<void>((resolve) => {
-    amqp.connect(`amqp://${process.env.RABBITMQ_HOST}`, (error, conn) => {
+  static connect = (hostname?: string) => new Promise<void>((resolve) => {
+    const host = hostname || process.env.RABBITMQ_HOST || 'localhost';
+    amqp.connect(`amqp://${host}`, (error, conn) => {
       if (error) throw error;
 
       connection = conn;
