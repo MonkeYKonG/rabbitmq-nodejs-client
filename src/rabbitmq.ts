@@ -450,7 +450,7 @@ export default class RabbitMQClient {
 
   static createReceiver = async <T extends BaseSendersReceivers>(
     queueName: keyof T,
-    consumeFunction: ConsumeFunction,
+    consumeFunction: T[typeof queueName]['consume'],
     prefetch?: number,
     channel?: IChannel<T>,
   ) => {
@@ -470,7 +470,7 @@ export default class RabbitMQClient {
 
   static createReceiverRPC = async <T extends BaseSendersReceivers>(
     queueName: keyof T,
-    consumeFunction: ConsumeFunction<SendToQueueMessage>,
+    consumeFunction: T[typeof queueName]['consume'],
     prefetch?: number,
     channel?: IChannel<T>,
   ) => {
