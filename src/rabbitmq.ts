@@ -90,7 +90,7 @@ export type BaseSendersReceiversRPC<QueueNames extends string = string, Argument
   }
 };
 
-interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
+export interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
   channel: IChannel;
   name: T['queueName'];
   send: T['send'];
@@ -101,13 +101,13 @@ interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
   ) => Promise<void>;
 }
 
-interface IExchange<T extends BaseSenderReceiver> {
+export interface IExchange<T extends BaseSenderReceiver> {
   channel: IChannel;
   name: T['queueName'];
   publish: T['publish'];
 }
 
-interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
+export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
   channel: amqp.Channel;
   queues: Queues<T>;
   exchanges: Exchanges<T>;
