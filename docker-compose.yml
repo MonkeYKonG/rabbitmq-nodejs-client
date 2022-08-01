@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq
+    container_name: rabbitmq_nodejs_test_db
+    ports:
+      - "5672:5672"
