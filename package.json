@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npx tsc",
-    "publishPackage": "npm run build && npm publish --access public",
+    "publishPackage": "npm run build && npm run test && npm publish --access public",
     "test": "npx jest"
   },
   "repository": {

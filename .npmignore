@@ -1,3 +1,6 @@
 src/
 node_modules/
 tests/
+docker-compose.yml
+.gitignore
+.git/
