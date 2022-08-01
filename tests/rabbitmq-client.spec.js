@@ -108,7 +108,7 @@ describe('Sender Receiver', () => {
     await RabbitMQClient.close();
   });
 
-  test('send string', (done) => {
+  test('Send string', (done) => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = 'My test message';
     const queueName = 'testQueue';
@@ -125,7 +125,7 @@ describe('Sender Receiver', () => {
     });
   });
 
-  test('send JSON', (done) => {
+  test('Send JSON', (done) => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = { message: 'My test message' };
     const queueName = 'testQueue';
@@ -135,6 +135,23 @@ describe('Sender Receiver', () => {
       RabbitMQClient.createReceiver(queueName, (message) => {
         expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
         expect(message.content).toMatchObject(testMessage);
+        done();
+      }),
+    ]).then(([sender, receiver]) => {
+      sender.queue.send(testMessage);
+    });
+  });
+
+  test('Async receiver', (done) => {
+    const expectedMessageKeys = ['fields', 'properties', 'content'];
+    const testMessage = 'My test message';
+    const queueName = 'testQueue';
+
+    Promise.all([
+      RabbitMQClient.createSender(queueName),
+      RabbitMQClient.createReceiver(queueName, async (message) => {
+        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+        expect(message.content).toBe(testMessage);
         done();
       }),
     ]).then(([sender, receiver]) => {
@@ -169,7 +186,7 @@ describe('Publisher Subscriber', () => {
     });
   });
 
-  test('send JSON', (done) => {
+  test('Send JSON', (done) => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = { message: 'My test message' };
     const exchangeName = 'testExchange';
@@ -184,7 +201,24 @@ describe('Publisher Subscriber', () => {
     ]).then(([sender, receiver]) => {
       sender.exchange.publish(testMessage);
     });
-  })
+  });
+
+  test('Async subscriber', (done) => {
+    const expectedMessageKeys = ['fields', 'properties', 'content'];
+    const testMessage = 'My test message';
+    const exchangeName = 'testExchange';
+
+    Promise.all([
+      RabbitMQClient.createPublisher(exchangeName, 'fanout'),
+      RabbitMQClient.createSubscriber(exchangeName, 'fanout', async (message) => {
+        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+        expect(message.content).toBe(testMessage);
+        done();
+      }),
+    ]).then(([sender, receiver]) => {
+      sender.exchange.publish(testMessage);
+    });
+  });
 });
 
 describe('RPC', () => {
@@ -196,7 +230,7 @@ describe('RPC', () => {
     await RabbitMQClient.close();
   });
 
-  test('send string answer string', async () => {
+  test('Send string answer string', async () => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = 'My test message';
     const testResponse = 'My test response';
@@ -213,7 +247,7 @@ describe('RPC', () => {
     expect(response).toBe(testResponse);
   });
 
-  test('send JSON answer string', async () => {
+  test('Send JSON answer string', async () => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = { message: 'My test message' };
     const testResponse = 'My test response';
@@ -230,7 +264,7 @@ describe('RPC', () => {
     expect(response).toBe(testResponse);
   });
 
-  test('send string answer JSON', async () => {
+  test('Send string answer JSON', async () => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = 'My test message';
     const testResponse = { message: 'My test response' };
@@ -247,7 +281,7 @@ describe('RPC', () => {
     expect(response).toMatchObject(testResponse);
   });
 
-  test('send JSON answer JSON', async () => {
+  test('Send JSON answer JSON', async () => {
     const expectedMessageKeys = ['fields', 'properties', 'content'];
     const testMessage = { message: 'My test message' };
     const testResponse = { message: 'My test response' };
@@ -262,5 +296,22 @@ describe('RPC', () => {
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toMatchObject(testResponse);
+  });
+
+  test('Async RPC server', async () => {
+    const expectedMessageKeys = ['fields', 'properties', 'content'];
+    const testMessage = 'My test message';
+    const testResponse = 'My test response';
+    const queueName = 'testQueue';
+
+    await RabbitMQClient.createReceiverRPC(queueName, async (message) => {
+      expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+      expect(message.content).toBe(testMessage);
+      return testResponse;
+    });
+    const { queue } = await RabbitMQClient.createSender(queueName);
+    const response = await queue.sendRPC(testMessage);
+
+    expect(response).toBe(testResponse);
   });
 })

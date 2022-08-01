@@ -390,11 +390,15 @@ export default class RabbitMQClient {
 
   static isDisconnected = () => connection == null;
 
-  static connect = (hostname?: string) => new Promise<void>((resolve, reject) => {
+  static connect = (
+    hostname?: string,
+    options: amqp.Options.Connect = {},
+  ) => new Promise<void>((resolve, reject) => {
     const host = hostname || process.env.RABBITMQ_HOST || 'localhost';
     const timer = setTimeout(() => { reject(new Error('timeout')); }, 2000);
     amqp.connect(
       `amqp://${host}`,
+      options,
       (error, conn) => {
         clearTimeout(timer);
         if (error) reject(error);
@@ -434,9 +438,10 @@ export default class RabbitMQClient {
   static createSender = async<T extends BaseSendersReceivers>(
     queueName: keyof T,
     channel?: IChannel<T>,
+    options: amqp.Options.AssertQueue = {},
   ) => {
     const currentChannel = channel != null ? channel : await this.createChannel<T>();
-    const queue = await currentChannel.assertQueue(queueName, { durable: false });
+    const queue = await currentChannel.assertQueue(queueName, { durable: false, ...options });
 
     return {
       channel: currentChannel,
@@ -449,6 +454,7 @@ export default class RabbitMQClient {
     exchangeName: keyof T,
     exchangeType: ExchangeTypes,
     channel?: IChannel<T>,
+    options: amqp.Options.AssertExchange = {},
   ) => {
     const currentChannel = channel != null
       ? channel
@@ -458,6 +464,7 @@ export default class RabbitMQClient {
       exchangeType,
       {
         durable: false,
+        ...options,
       },
     );
 
@@ -473,14 +480,22 @@ export default class RabbitMQClient {
     consumeFunction: T[typeof queueName]['consume'],
     prefetch?: number,
     channel?: IChannel<T>,
+    assertOptions: amqp.Options.AssertQueue = {},
+    consumeOptions: amqp.Options.Consume = {},
   ) => {
     const currentChannel = channel != null ? channel : await this.createChannel<T>();
-    const queue = await currentChannel.assertQueue(queueName, { durable: false });
+    const queue = await currentChannel.assertQueue(
+      queueName,
+      { durable: false, ...assertOptions },
+    );
 
     if (prefetch != null) {
       currentChannel.channel.prefetch(1);
     }
-    await queue.setConsume(toParsedMessageConsumer(consumeFunction), { noAck: true });
+    await queue.setConsume(
+      toParsedMessageConsumer(consumeFunction),
+      { noAck: true, ...consumeOptions },
+    );
     return {
       channel: currentChannel,
       queue,
@@ -493,6 +508,9 @@ export default class RabbitMQClient {
     consumeFunction: T[typeof queueName]['consume'],
     prefetch?: number,
     channel?: IChannel<T>,
+    assertOptions: amqp.Options.AssertQueue = {},
+    consumeOptions: amqp.Options.Consume = {},
+    sendResponseOptions: amqp.Options.Publish = {},
   ) => {
     const currentChannel = channel != null ? channel : await this.createChannel<T>();
 
@@ -507,12 +525,15 @@ export default class RabbitMQClient {
             isPromise(consumeReturn) ? await consumeReturn : consumeReturn,
             {
               correlationId: message.properties.correlationId,
+              ...sendResponseOptions,
             },
           );
         }
       },
       prefetch,
       currentChannel,
+      assertOptions,
+      consumeOptions,
     );
   };
 
@@ -522,14 +543,20 @@ export default class RabbitMQClient {
     consumeFunction: T[typeof exchangeName]['consume'],
     patterns: string[] = [''],
     channel?: IChannel<T>,
+    exchangeOptions: amqp.Options.AssertExchange = {},
+    queueOptions: amqp.Options.AssertQueue = {},
+    consumeOptions: amqp.Options.Consume = {},
   ) => {
     const currentChannel = channel != null ? channel : await this.createChannel<T>();
     const exchange = await currentChannel.asserExchange(
       exchangeName.toString(),
       exchangeType,
-      { durable: false },
+      { durable: false, ...exchangeOptions },
     );
-    const queue = await currentChannel.assertQueue('', { exclusive: true });
+    const queue = await currentChannel.assertQueue(
+      '',
+      { exclusive: true, ...queueOptions },
+    );
 
     await Promise.all(
       patterns.map(
@@ -540,7 +567,10 @@ export default class RabbitMQClient {
         ),
       ),
     );
-    await queue.setConsume(toParsedMessageConsumer(consumeFunction), { noAck: true });
+    await queue.setConsume(
+      toParsedMessageConsumer(consumeFunction),
+      { noAck: true, ...consumeOptions },
+    );
     return {
       channel: currentChannel,
       exchange,
