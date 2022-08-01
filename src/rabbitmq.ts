@@ -158,6 +158,13 @@ const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
   content: JSON.parse(message.content.toString()),
 });
 
+const toParsedMessageConsumer = <T extends BaseSenderReceiver>(consumeFunction: T['consume']) => (message: amqp.Message | null) => {
+  if (message == null) {
+    return;
+  }
+  return consumeFunction(toParsedMessage<Parameters<T['consume']>[0]>(message));
+};
+
 class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
   declare channel;
 
@@ -383,14 +390,19 @@ export default class RabbitMQClient {
 
   static isDisconnected = () => connection == null;
 
-  static connect = (hostname?: string) => new Promise<void>((resolve) => {
+  static connect = (hostname?: string) => new Promise<void>((resolve, reject) => {
     const host = hostname || process.env.RABBITMQ_HOST || 'localhost';
-    amqp.connect(`amqp://${host}`, (error, conn) => {
-      if (error) throw error;
+    const timer = setTimeout(() => { reject(new Error('timeout')); }, 2000);
+    amqp.connect(
+      `amqp://${host}`,
+      (error, conn) => {
+        clearTimeout(timer);
+        if (error) reject(error);
 
-      connection = conn;
-      resolve();
-    });
+        connection = conn;
+        resolve();
+      },
+    );
   });
 
   static close = () => new Promise<void>((resolve) => {
@@ -468,12 +480,7 @@ export default class RabbitMQClient {
     if (prefetch != null) {
       currentChannel.channel.prefetch(1);
     }
-    await queue.setConsume((message) => {
-      if (message == null) {
-        return;
-      }
-      return consumeFunction(toParsedMessage<Parameters<typeof consumeFunction>[0]>(message));
-    }, { noAck: true });
+    await queue.setConsume(toParsedMessageConsumer(consumeFunction), { noAck: true });
     return {
       channel: currentChannel,
       queue,
@@ -493,8 +500,7 @@ export default class RabbitMQClient {
       queueName,
       async (message) => {
         if (message?.properties.replyTo != null) {
-          const parsedMessage = toParsedMessage<Parameters<typeof consumeFunction>[0]>(message);
-          const consumeReturn = consumeFunction(parsedMessage);
+          const consumeReturn = consumeFunction(message);
 
           currentChannel.sendToQueue(
             message.properties.replyTo,
@@ -509,18 +515,6 @@ export default class RabbitMQClient {
       currentChannel,
     );
   };
-
-  // static createReceiverRPCJson = <T extends BaseSendersReceiversRPC>(
-  //   queueName: keyof T,
-  //   consumeFunction: T[typeof queueName]['consume'],
-  //   prefetch?: number,
-  //   channel?: IChannel<T>,
-  // ) => this.createReceiverRPC<T>(
-  //   queueName,
-  //   consumeFunction,
-  //   prefetch,
-  //   channel,
-  // );
 
   static createSubscriber = async <T extends BaseSendersReceivers>(
     exchangeName: keyof T,
@@ -546,7 +540,7 @@ export default class RabbitMQClient {
         ),
       ),
     );
-    await queue.setConsume(consumeFunction, { noAck: true });
+    await queue.setConsume(toParsedMessageConsumer(consumeFunction), { noAck: true });
     return {
       channel: currentChannel,
       exchange,
