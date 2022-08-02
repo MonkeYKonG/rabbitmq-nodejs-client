@@ -45,13 +45,13 @@ export type BaseSendRPCFunction<QueueNames extends string, Arguments extends Bas
 
 export type BaseConsumeFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>> = {
   [key in QueueNames]: (
-    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]> | null,
+    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]>,
   ) => void | Promise<void> | any | Promise<any>;
 };
 
 export type BaseConsumeRPCFunction<QueueNames extends string, Arguments extends BaseArguments<QueueNames>, Returns extends BaseReturns<QueueNames>> = {
   [key in QueueNames]: (
-    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]> | null,
+    message: ParsedMessage<BaseMessageArguments<QueueNames, Arguments>[key]>,
   ) => BaseMessageReturn<QueueNames, Returns>[key] | Promise<BaseMessageReturn<QueueNames, Returns>[key]>;
 };
 
@@ -129,7 +129,7 @@ export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers>
   ) => Promise<void>;
   consumeQueue: <U extends keyof T>(
     queueName: U,
-    consumeFunction: T[U]['consume'],
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T[U]['consume']>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
   sendToQueue: <U extends keyof T>(
@@ -435,7 +435,7 @@ export default class RabbitMQClient {
     return this.privateCreateChannel<T>();
   };
 
-  static createSender = async<T extends BaseSendersReceivers>(
+  static createSender = async <T extends BaseSendersReceivers>(
     queueName: keyof T,
     channel?: IChannel<T>,
     options: amqp.Options.AssertQueue = {},
