@@ -14,12 +14,9 @@ type BaseReturns<T extends BaseQueueName> = Record<T, any>;
 
 type SendToQueueMessage = any;
 
-// type Queues<T extends BaseSenderReceiver> = Record<string, IQueue<T>>;
-// type Queues<T extends BaseSendersReceivers> = Record<string, { [key in keyof T]: IQueue<T[key]> }[keyof T]>;
 type Queues = Record<string, IQueue<any>>;
 
 type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
-// type Exchanges<T extends BaseSenderReceiver> = Record<string, IExchange<T>>;
 type Exchanges = Record<string, IExchange<any>>;
 
 type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
