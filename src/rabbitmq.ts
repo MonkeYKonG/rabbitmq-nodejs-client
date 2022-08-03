@@ -14,10 +14,13 @@ type BaseReturns<T extends BaseQueueName> = Record<T, any>;
 
 type SendToQueueMessage = any;
 
-type Queues<T extends BaseSendersReceivers> = Record<string, IQueue<T[keyof T]>>;
+// type Queues<T extends BaseSenderReceiver> = Record<string, IQueue<T>>;
+// type Queues<T extends BaseSendersReceivers> = Record<string, { [key in keyof T]: IQueue<T[key]> }[keyof T]>;
+type Queues = Record<string, IQueue<any>>;
 
 type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
-type Exchanges<T extends BaseSendersReceivers> = Record<string, IExchange<T[keyof T]>>;
+// type Exchanges<T extends BaseSenderReceiver> = Record<string, IExchange<T>>;
+type Exchanges = Record<string, IExchange<any>>;
 
 type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
   content: T
@@ -109,8 +112,8 @@ export interface IExchange<T extends BaseSenderReceiver> {
 
 export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
   channel: amqp.Channel;
-  queues: Queues<T>;
-  exchanges: Exchanges<T>;
+  queues: Queues;
+  exchanges: Exchanges;
   close: () => Promise<void>;
   assertQueue: <U extends keyof T>(
     queueName: U,
@@ -435,12 +438,12 @@ export default class RabbitMQClient {
     return this.privateCreateChannel<T>();
   };
 
-  static createSender = async <T extends BaseSendersReceivers>(
-    queueName: keyof T,
-    channel?: IChannel<T>,
+  static createSender = async <T extends BaseSenderReceiver>(
+    queueName: T['queueName'],
+    channel?: IChannel<{ [key in typeof queueName]: T }>,
     options: amqp.Options.AssertQueue = {},
   ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
+    const currentChannel = channel != null ? channel : await this.createChannel<{ [key in typeof queueName]: T }>();
     const queue = await currentChannel.assertQueue(queueName, { durable: false, ...options });
 
     return {
@@ -450,15 +453,15 @@ export default class RabbitMQClient {
     };
   };
 
-  static createPublisher = async <T extends BaseSendersReceivers>(
-    exchangeName: keyof T,
+  static createPublisher = async <T extends BaseSenderReceiver>(
+    exchangeName: T['queueName'],
     exchangeType: ExchangeTypes,
-    channel?: IChannel<T>,
+    channel?: IChannel<{ [key in typeof exchangeName]: T }>,
     options: amqp.Options.AssertExchange = {},
   ) => {
     const currentChannel = channel != null
       ? channel
-      : await this.createChannel<T>();
+      : await this.createChannel<{ [key in typeof exchangeName]: T }>();
     const exchange = await currentChannel.asserExchange(
       exchangeName,
       exchangeType,
@@ -475,15 +478,15 @@ export default class RabbitMQClient {
     };
   };
 
-  static createReceiver = async <T extends BaseSendersReceivers>(
-    queueName: keyof T,
-    consumeFunction: T[typeof queueName]['consume'],
+  static createReceiver = async <T extends BaseSenderReceiver>(
+    queueName: T['queueName'],
+    consumeFunction: T['consume'],
     prefetch?: number,
-    channel?: IChannel<T>,
+    channel?: IChannel<{ [key in typeof queueName]: T }>,
     assertOptions: amqp.Options.AssertQueue = {},
     consumeOptions: amqp.Options.Consume = {},
   ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
+    const currentChannel = channel != null ? channel : await this.createChannel<{ [key in typeof queueName]: T }>();
     const queue = await currentChannel.assertQueue(
       queueName,
       { durable: false, ...assertOptions },
@@ -503,16 +506,16 @@ export default class RabbitMQClient {
     };
   };
 
-  static createReceiverRPC = async <T extends BaseSendersReceivers>(
-    queueName: keyof T,
-    consumeFunction: T[typeof queueName]['consume'],
+  static createReceiverRPC = async <T extends BaseSenderReceiver>(
+    queueName: T['queueName'],
+    consumeFunction: T['consume'],
     prefetch?: number,
-    channel?: IChannel<T>,
+    channel?: IChannel<{ [key in typeof queueName]: T }>,
     assertOptions: amqp.Options.AssertQueue = {},
     consumeOptions: amqp.Options.Consume = {},
     sendResponseOptions: amqp.Options.Publish = {},
   ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
+    const currentChannel = channel != null ? channel : await this.createChannel<{ [key in typeof queueName]: T }>();
 
     return this.createReceiver(
       queueName,
@@ -537,19 +540,19 @@ export default class RabbitMQClient {
     );
   };
 
-  static createSubscriber = async <T extends BaseSendersReceivers>(
-    exchangeName: keyof T,
+  static createSubscriber = async <T extends BaseSenderReceiver>(
+    exchangeName: T['queueName'],
     exchangeType: ExchangeTypes,
-    consumeFunction: T[typeof exchangeName]['consume'],
+    consumeFunction: T['consume'],
     patterns: string[] = [''],
-    channel?: IChannel<T>,
+    channel?: IChannel<{ [key in typeof exchangeName]: T }>,
     exchangeOptions: amqp.Options.AssertExchange = {},
     queueOptions: amqp.Options.AssertQueue = {},
     consumeOptions: amqp.Options.Consume = {},
   ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
+    const currentChannel = channel != null ? channel : await this.createChannel<{ [key in typeof exchangeName]: T }>();
     const exchange = await currentChannel.asserExchange(
-      exchangeName.toString(),
+      exchangeName,
       exchangeType,
       { durable: false, ...exchangeOptions },
     );
