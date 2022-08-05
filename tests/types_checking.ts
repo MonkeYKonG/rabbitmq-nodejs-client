@@ -1,4 +1,4 @@
-import RabbitMQClient, { BaseSendersReceivers } from "../src/rabbitmq";
+import RabbitMQClient, { BaseSendersReceivers, ParamIntersection, ParsedMessage } from "../src/rabbitmq";
 
 enum enumOne {
   ONE_ONE = 'one_one',
@@ -10,10 +10,21 @@ enum enumTwo {
   TWO_TWO = 'two_two',
 }
 
+type Command<T extends string = string, U = any> = {
+  command: T;
+  args: U;
+};
+
 type MessageTypeOne = {
   [enumOne.ONE_ONE]: {
-    'hello': { argument: string, return: void },
-    'bonjour': { argument: string, return: void },
+    'hello': {
+      argument: Command<'hey', { a: string, b: number }>,
+      return: void,
+    },
+    'bonjour': {
+      argument: Command<'salut', { c: string, d: number }>,
+      return: void,
+    },
   };
   [enumOne.ONE_TWO]: {
     'World': { argument: string, return: void },
@@ -32,43 +43,43 @@ type MessageTypeTwo = {
   };
 }
 
-type MKeys = {
-  [key in keyof MessageTypeOne]: keyof MessageTypeOne[key];
-}
-
-// type SenderReceiverOne = BaseSendersReceivers<enumOne, MessageTypeOne>;
 type SenderReceiverOne = BaseSendersReceivers<MessageTypeOne>;
-// type SenderReceiverTwo = BaseSendersReceivers<enumTwo, MessageTypeTwo>;
 type SenderReceiverTwo = BaseSendersReceivers<MessageTypeTwo>;
 
 type SendersReceivers = SenderReceiverOne & SenderReceiverTwo;
 
 const main = async () => {
-  const channel = await RabbitMQClient.createChannel<SenderReceiverOne>();
-  const channel2 = await RabbitMQClient.createChannel<SenderReceiverTwo>();
-  const channelBoth = await RabbitMQClient.createChannel<SendersReceivers>();
+  const channel = await RabbitMQClient.createChannel<SendersReceivers>();
 
-  // const senderOne = await RabbitMQClient.createSender<SendersReceivers>(
-  //   enumOne.ONE_ONE,
-  //   channel,
-  // );
-  // const senderTwo = await RabbitMQClient.createSender<SendersReceivers>(
-  //   enumTwo.TWO_TWO,
-  //   channel,
-  // );
+  const senderOne = await channel.assertQueue(
+    enumOne.ONE_ONE,
+  );
+  const senderTwo = await channel.assertQueue(
+    enumTwo.TWO_TWO,
+  );
 
-  // senderOne.queue.send('string');
-  // senderTwo.queue.send({ d: "hello" });
+  senderOne.send({ command: 'hey', args: { a: 'gello', b: 23 } });
+  senderOne.send({ command: 'salut', args: { c: 'gello', d: 23 } });
 
-  // await RabbitMQClient.createReceiver<SendersReceivers[enumOne.ONE_ONE]>(enumOne.ONE_ONE, (message) => {
-  //   message.content.a;
-  // });
+  await channel.createReceiverOverload(enumOne.ONE_ONE, (message) => {
 
-  // await RabbitMQClient.createReceiver<SendersReceivers[enumTwo.TWO_TWO]>(enumTwo.TWO_TWO, (message) => {
-  //   message.content.d;
-  // });
+  });
 
-  // await channel.close();
+  await channel.createReceiver(
+    enumOne.ONE_ONE,
+    (message) => {
+      switch (message.command) {
+        case 'hey':
+          message.command;
+      }
+    },
+  );
+
+  await RabbitMQClient.createReceiver<SendersReceivers, enumTwo.TWO_TWO>(enumTwo.TWO_TWO, (message) => {
+    message.content;
+  });
+
+  await channel.close();
 };
 
 // const main2 = async () => {

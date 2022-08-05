@@ -8,17 +8,20 @@ import { RABBITMQ } from './errors';
 
 dotenv.config();
 
-type A = (m: string) => void;
-type B = (message: number) => void;
-type C = A | B;
+export type ParamIntersection<T> = {
+  [K in keyof T]: (x: T[K]) => any
+}[keyof T] extends
+  (x: infer I) => any ? I : never;
 
-const f: C = (message) => {
-  message;
-}
+export type ParamMerged<T> = {
+  [K in keyof T]: (x: T[K]) => void
+}[keyof T] extends
+  (x: infer I) => void ? { [K in keyof I]: I[K] } : never;
 
 type KeyOf = string | number | symbol;
+type BaseQueueName = string;
 
-type BaseArgumentBody<Args extends any = any, Return extends any = any> = {
+interface BaseArgumentBody<Args extends any = any, Return extends any = any> {
   argument: Args;
   return: Return;
 }
@@ -29,7 +32,6 @@ type BaseArgumentRPC<Keys extends KeyOf = KeyOf> = {
   [k in Keys]: BaseArgumentBody<any, any>;
 };
 
-type BaseQueueName = string;
 export type BaseArguments<
   T extends KeyOf,
   U extends { [key in T]: string } = { [key in T]: string }
@@ -56,11 +58,13 @@ type Queues = Record<string, IQueue<any>>;
 // type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
 // type Exchanges = Record<string, IExchange<any>>;
 
-type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
+export type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
   content: T
 };
 
-type BaseSendFunction<T extends BaseArgumentBody> = (message: T['argument']) => T['return'];
+type BaseSendFunction<T extends BaseArgumentBody> = (
+  message: T['argument'],
+) => T['return'];
 export type BaseSendFunctions<
   Argument extends BaseArgument,
   > = {
@@ -75,13 +79,14 @@ export type BaseSendRPCFunction<
     ) => Promise<Argument[key]['return']>;
   };
 
+// export type BaseConsumeFunction<T extends BaseArgumentBody> = (
+//   message: ParsedMessage<T['argument']>
+// ) => T['return'] | Promise<T['return']>;
 export type BaseConsumeFunction<
   Argument extends BaseArgument,
-  > = {
-    [key in keyof Argument]: (
-      message: ParsedMessage<Argument[key]['argument']>,
-    ) => void | Promise<void>;
-  };
+  > = (
+    message: ParsedMessage<Argument[keyof Argument]['argument']>,
+  ) => void | Promise<void>;
 
 // export type BaseConsumeRPCFunction<
 //   Argument extends BaseArgumentRPC,
@@ -105,16 +110,17 @@ type BaseSenderReceiver<
   Argument extends BaseArgument = BaseArgument,
   > = {
     queueName: QueueName;
-    argKeys: keyof Argument;
-    send: BaseSendFunctions<Argument>;
+    // argKeys: keyof Argument;
+    send: ParamIntersection<BaseSendFunctions<Argument>>;
     // sendRPC: BaseSendRPCFunction<Argument>;
     consume: BaseConsumeFunction<Argument>;
+    // consume: ParamIntersection<BaseConsumeFunctions<Argument>>; // OLD
     // consumeRPC: BaseConsumeRPCFunction<Arguments[QueueName]>;
     // publish: BasePublishFunction<Argument>;
   };
 
 export type BaseSendersReceivers<
-  Arguments extends BaseArguments<keyof Arguments> = BaseArguments<string>,
+  Arguments extends BaseArguments<keyof Arguments>,
   > = {
     [key in keyof Arguments]: BaseSenderReceiver<key, Arguments[key]>;
   };
@@ -127,13 +133,13 @@ export type BaseSendersReceivers<
 //     // }[QueueNames];
 //   };
 
-export interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
+export interface IQueue<T extends BaseSenderReceiver<keyof T>> {
   channel: IChannel;
   name: T['queueName'];
-  send: T['send'][T['argKeys']];
+  send: T['send'];
   // sendRPC: T['sendRPC'][keyof T['sendRPC']];
   setConsume: (
-    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consume'][keyof T['consume']]>,
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consume']>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
   // setConsumeRPC: (
@@ -148,11 +154,37 @@ export interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
 //   publish: T['publish'];
 // }
 
-export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
+export interface IChannel<
+  Arguments extends BaseArguments<keyof Arguments>,
+  T extends BaseSendersReceivers<Arguments>,
+  > {
   channel: amqp.Channel;
   queues: Queues;
   // exchanges: Exchanges;
   close: () => Promise<void>;
+  createSender: IChannel<Arguments, T>['assertQueue'];
+  // createPublisher;
+
+  createReceiverOverload: ParamIntersection<{
+    [key in keyof T]: (
+      queueName: key,
+      consumeFunction: T[key]['consume'],
+      // consumeFunction: (message: ParsedMessage<string | number>) => void | Promise<void>,
+      prefetch?: number,
+      assertOptions?: amqp.Options.AssertQueue,
+      consumeOptions?: amqp.Options.Consume,
+    ) => Promise<IQueue<T[key]>>;
+  }>;
+
+  createReceiver: <U extends keyof Arguments>(
+    queueName: U,
+    consumeFunction: T[U]['consume'],
+    prefetch?: number,
+    assertOptions?: amqp.Options.AssertQueue,
+    consumeOptions?: amqp.Options.Consume,
+  ) => Promise<IQueue<T[U]>>;
+
+  // createSubscriber;
   assertQueue: <U extends keyof T>(
     queueName: U,
     options?: amqp.Options.AssertQueue,
@@ -170,7 +202,7 @@ export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers>
   // ) => Promise<void>;
   consumeQueue: <U extends keyof T>(
     queueName: U,
-    consumeFunction: (message: amqp.Message | null) => ReturnType<T[U]['consume'][keyof T[U]['consume']]>,
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T[U]['consume']>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
   sendToQueue: <U extends keyof T>(
@@ -194,22 +226,22 @@ export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers>
 //   return false;
 // }
 
-// const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
-//   ...message,
-//   content: JSON.parse(message.content.toString()),
-// });
+const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
+  ...message,
+  content: JSON.parse(message.content.toString()),
+});
 
-// type ToParsedMessageConsumer = <T extends BaseSenderReceiver>(consumeFunction: T['consume']) => (message: amqp.Message | null) => ReturnType<typeof consumeFunction>;
-// const toParsedMessageConsumer: ToParsedMessageConsumer = <T extends BaseSenderReceiver>(
-//   consumeFunction: T['consume'],
-// ) => (
-//   message,
-//   ) => {
-//     if (message == null) {
-//       throw new Error('null message');
-//     }
-//     return consumeFunction(toParsedMessage(message)) as ReturnType<T['consume']>;
-//   };
+type ToParsedMessageConsumer = <T extends BaseSenderReceiver>(consumeFunction: T['consume']) => (message: amqp.Message | null) => ReturnType<typeof consumeFunction>;
+const toParsedMessageConsumer: ToParsedMessageConsumer = <T extends BaseSenderReceiver>(
+  consumeFunction: T['consume'],
+) => (
+  message,
+  ) => {
+    if (message == null) {
+      throw new Error('null message');
+    }
+    return consumeFunction(toParsedMessage(message)) as ReturnType<T['consume']>;
+  };
 
 class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
   declare channel;
@@ -221,7 +253,7 @@ class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
     this.name = queue.queue;
   }
 
-  send: IQueue<T>['send'] = (...message: any): any => {
+  send: IQueue<T>['send'] = (message) => {
     this.channel.sendToQueue(this.name, message);
   };
 
@@ -479,15 +511,15 @@ export default class RabbitMQClient {
     });
   });
 
-  static createChannel = async <T extends BaseSendersReceivers>(): Promise<Channel<T>> => {
+  static createChannel = async <T extends BaseSendersReceivers>(): Promise<IChannel<T>> => {
     if (this.isDisconnected()) {
       await this.connect();
     }
     return this.privateCreateChannel<T>();
   };
 
-  // static createSender = async <T extends BaseSendersReceivers>(
-  //   queueName: T[keyof T]['queueName'],
+  // static createSender = async <T extends BaseSendersReceivers, Q extends keyof T>(
+  //   queueName: Q,
   //   channel?: IChannel<T>,
   //   options: amqp.Options.AssertQueue = {},
   // ) => {
@@ -497,7 +529,7 @@ export default class RabbitMQClient {
   //   return {
   //     channel: currentChannel,
   //     queue,
-  //     name: queue.name as typeof queueName,
+  //     name: queue.name,
   //   };
   // };
 
@@ -526,9 +558,9 @@ export default class RabbitMQClient {
   //   };
   // };
 
-  // static createReceiver = async <T extends BaseSendersReceivers>(
-  //   queueName: keyof T,
-  //   consumeFunction: T[keyof T]['consume'],
+  // static createReceiver = async <T extends BaseSendersReceivers, Q extends keyof T>(
+  //   queueName: Q,
+  //   consumeFunction: T[Q]['consume'],
   //   prefetch?: number,
   //   channel?: IChannel<T>,
   //   assertOptions: amqp.Options.AssertQueue = {},
