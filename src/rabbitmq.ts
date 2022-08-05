@@ -8,56 +8,64 @@ import { RABBITMQ } from './errors';
 
 dotenv.config();
 
+type A = (m: string) => void;
+type B = (message: number) => void;
+type C = A | B;
+
+const f: C = (message) => {
+  message;
+}
+
 type KeyOf = string | number | symbol;
 
-export type BaseArgument<Keys extends KeyOf = KeyOf> = {
-  [k in Keys]: {
-    argument: any;
-    return: void;
-  } };
-type BaseArgumentRPC = Record<any, {
-  argument: any;
-  return: any;
-}>;
+type BaseArgumentBody<Args extends any = any, Return extends any = any> = {
+  argument: Args;
+  return: Return;
+}
+type BaseArgument<Keys extends KeyOf = KeyOf> = {
+  [k in Keys]: BaseArgumentBody<any, void>;
+}
+type BaseArgumentRPC<Keys extends KeyOf = KeyOf> = {
+  [k in Keys]: BaseArgumentBody<any, any>;
+};
 
 type BaseQueueName = string;
-// export type BaseArguments<
-//   T extends BaseQueueName,
-//   U extends { [key in T]: string } = { [key in T]: string }
-//   > = {
-//     [key in T]: BaseArgument<U[key]>
-//   };
 export type BaseArguments<
-  T extends BaseQueueName,
+  T extends KeyOf,
   U extends { [key in T]: string } = { [key in T]: string }
   > = {
-    [key in T]: {
-      [k in U[key]]: {
-        argument: any;
-        return: void;
-      }
-    }
+    [key in T]: BaseArgument<U[key]>
   };
-type BaseArgumentsRPC<T extends BaseQueueName> = Record<T, BaseArgumentRPC>;
+// export type BaseArguments<
+//   T extends KeyOf,
+//   U extends { [key in T]: string } = { [key in T]: string }
+//   > = {
+//     [key in T]: {
+//       [k in U[key]]: {
+//         argument: any;
+//         return: void;
+//       }
+//     }
+//   };
+// type BaseArgumentsRPC<T extends BaseQueueName> = Record<T, BaseArgumentRPC>;
 
 type SendToQueueMessage = any;
 
 type Queues = Record<string, IQueue<any>>;
 
-type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
-type Exchanges = Record<string, IExchange<any>>;
+// type ExchangeTypes = 'fanout' | 'direct' | 'topic' | 'header';
+// type Exchanges = Record<string, IExchange<any>>;
 
 type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
   content: T
 };
 
-export type BaseSendFunction<
-  Argument extends BaseArgument<string>,
+type BaseSendFunction<T extends BaseArgumentBody> = (message: T['argument']) => T['return'];
+export type BaseSendFunctions<
+  Argument extends BaseArgument,
   > = {
-    [key in keyof Argument]: (
-      message: Argument[key]['argument'],
-    ) => void;
-  }[keyof Argument];
+    [key in keyof Argument]: BaseSendFunction<Argument[key]>;
+  };
 
 export type BaseSendRPCFunction<
   Argument extends BaseArgumentRPC,
@@ -65,7 +73,7 @@ export type BaseSendRPCFunction<
     [key in keyof Argument]: (
       message: Argument[key]['argument'],
     ) => Promise<Argument[key]['return']>;
-  }[keyof Argument];
+  };
 
 export type BaseConsumeFunction<
   Argument extends BaseArgument,
@@ -73,15 +81,15 @@ export type BaseConsumeFunction<
     [key in keyof Argument]: (
       message: ParsedMessage<Argument[key]['argument']>,
     ) => void | Promise<void>;
-  }[keyof Argument];
+  };
 
-export type BaseConsumeRPCFunction<
-  Argument extends BaseArgumentRPC,
-  > = {
-    [key in keyof Argument]: (
-      message: ParsedMessage<Argument[key]['argument']>,
-    ) => Argument[key]['return'] | Promise<Argument[key]['return']>;
-  }[keyof Argument];
+// export type BaseConsumeRPCFunction<
+//   Argument extends BaseArgumentRPC,
+//   > = {
+//     [key in keyof Argument]: (
+//       message: ParsedMessage<Argument[key]['argument']>,
+//     ) => Argument[key]['return'] | Promise<Argument[key]['return']>;
+//   }[keyof Argument];
 
 export type BasePublishFunction<
   Argument extends BaseArgument,
@@ -90,80 +98,79 @@ export type BasePublishFunction<
       message: Argument[key]['argument'],
       routingKey?: string,
     ) => void;
-  }[keyof Argument]
+  };
 
 type BaseSenderReceiver<
-  QueueName extends string = string,
-  Keys extends KeyOf = string,
-  Argument extends BaseArgument<Keys> = BaseArgument<Keys>,
+  QueueName extends KeyOf = KeyOf,
+  Argument extends BaseArgument = BaseArgument,
   > = {
-    queueName: QueueName,
-    send: BaseSendFunction<Argument>;
-    sendRPC: BaseSendRPCFunction<Argument>;
+    queueName: QueueName;
+    argKeys: keyof Argument;
+    send: BaseSendFunctions<Argument>;
+    // sendRPC: BaseSendRPCFunction<Argument>;
     consume: BaseConsumeFunction<Argument>;
-    consumeRPC: BaseConsumeRPCFunction<Argument>;
-    publish: BasePublishFunction<Argument>;
+    // consumeRPC: BaseConsumeRPCFunction<Arguments[QueueName]>;
+    // publish: BasePublishFunction<Argument>;
   };
 
 export type BaseSendersReceivers<
-  QueueNames extends string = string,
-  Arguments extends BaseArguments<QueueNames> = BaseArguments<QueueNames>,
+  Arguments extends BaseArguments<keyof Arguments> = BaseArguments<string>,
   > = {
-    [key in keyof Arguments]: BaseSenderReceiver<key, keyof Arguments[key], Arguments[key]>;
+    [key in keyof Arguments]: BaseSenderReceiver<key, Arguments[key]>;
   };
 
-export type BaseSendersReceiversRPC<
-  QueueNames extends string = string,
-  Arguments extends BaseArgumentsRPC<QueueNames> = BaseArgumentsRPC<QueueNames>
-  > = {
-    [key in QueueNames]: BaseSenderReceiver<key, Arguments>;
-    // }[QueueNames];
-  };
+// export type BaseSendersReceiversRPC<
+//   QueueNames extends string = string,
+//   Arguments extends BaseArgumentsRPC<QueueNames> = BaseArgumentsRPC<QueueNames>
+//   > = {
+//     [key in QueueNames]: BaseSenderReceiver<key, Arguments[key]>;
+//     // }[QueueNames];
+//   };
 
 export interface IQueue<T extends BaseSenderReceiver = BaseSenderReceiver> {
   channel: IChannel;
   name: T['queueName'];
-  send: T['send'];
-  sendRPC: T['sendRPC'];
+  send: T['send'][T['argKeys']];
+  // sendRPC: T['sendRPC'][keyof T['sendRPC']];
   setConsume: (
-    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consume']>, // Possible to have the same with ReturnType<T['consume']>
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consume'][keyof T['consume']]>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
-  setConsumeRPC: (
-    consumeFunction: (message: amqp.Message | null) => ReturnType<T['consumeRPC']>,
-    options?: amqp.Options.Consume,
-  ) => Promise<void>;
+  // setConsumeRPC: (
+  //   consumeFunction: (message: amqp.Message | null) => ReturnType<T['consumeRPC']>,
+  //   options?: amqp.Options.Consume,
+  // ) => Promise<void>;
 }
 
-export interface IExchange<T extends BaseSenderReceiver> {
-  channel: IChannel;
-  name: T['queueName'];
-  publish: T['publish'];
-}
+// export interface IExchange<T extends BaseSenderReceiver> {
+//   channel: IChannel;
+//   name: T['queueName'];
+//   publish: T['publish'];
+// }
 
 export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers> {
   channel: amqp.Channel;
   queues: Queues;
-  exchanges: Exchanges;
+  // exchanges: Exchanges;
   close: () => Promise<void>;
   assertQueue: <U extends keyof T>(
     queueName: U,
     options?: amqp.Options.AssertQueue,
   ) => Promise<IQueue<T[U]>>;
-  asserExchange: <U extends keyof T>(
-    exchangeName: U,
-    exchangeType: ExchangeTypes,
-    options?: amqp.Options.AssertExchange,
-  ) => Promise<IExchange<T[U]>>;
-  bindQueue: <U extends keyof T>(
-    queueName: string,
-    exchangeName: U,
-    pattern: string,
-    args?: any,
-  ) => Promise<void>;
+  // asserExchange: <U extends keyof T>(
+  //   exchangeName: U,
+  //   exchangeType: ExchangeTypes,
+  //   options?: amqp.Options.AssertExchange,
+  // ) => Promise<IExchange<T[U]>>;
+  // bindQueue: <U extends keyof T>(
+  //   queueName: string,
+  //   exchangeName: U,
+  //   pattern: string,
+  //   args?: any,
+  // ) => Promise<void>;
   consumeQueue: <U extends keyof T>(
     queueName: U,
-    consumeFunction: (message: amqp.Message | null) => ReturnType<T[U]['consume']>,
+    consumeFunction: (message: amqp.Message | null) => ReturnType<T[U]['consume'][keyof T[U]['consume']]>,
     options?: amqp.Options.Consume,
   ) => Promise<void>;
   sendToQueue: <U extends keyof T>(
@@ -172,37 +179,37 @@ export interface IChannel<T extends BaseSendersReceivers = BaseSendersReceivers>
     options?: amqp.Options.Publish,
     checkQueue?: boolean,
   ) => void;
-  publish: <U extends keyof T>(
-    exchangeName: U,
-    message: SendToQueueMessage,
-    routingKey: string,
-  ) => void;
+  // publish: <U extends keyof T>(
+  //   exchangeName: U,
+  //   message: SendToQueueMessage,
+  //   routingKey: string,
+  // ) => void;
 }
 
-const isPromise = (value: any) => {
-  if (typeof value === 'object' && typeof value.then === 'function') {
-    return true;
-  }
+// const isPromise = (value: any) => {
+//   if (typeof value === 'object' && typeof value.then === 'function') {
+//     return true;
+//   }
 
-  return false;
-}
+//   return false;
+// }
 
-const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
-  ...message,
-  content: JSON.parse(message.content.toString()),
-});
+// const toParsedMessage = <T>(message: amqp.Message): ParsedMessage<T> => ({
+//   ...message,
+//   content: JSON.parse(message.content.toString()),
+// });
 
-type ToParsedMessageConsumer = <T extends BaseSenderReceiver>(consumeFunction: T['consume']) => (message: amqp.Message | null) => ReturnType<typeof consumeFunction>;
-const toParsedMessageConsumer: ToParsedMessageConsumer = <T extends BaseSenderReceiver>(
-  consumeFunction: T['consume'],
-) => (
-  message,
-  ) => {
-    if (message == null) {
-      throw new Error('null message');
-    }
-    return consumeFunction(toParsedMessage(message)) as ReturnType<T['consume']>;
-  };
+// type ToParsedMessageConsumer = <T extends BaseSenderReceiver>(consumeFunction: T['consume']) => (message: amqp.Message | null) => ReturnType<typeof consumeFunction>;
+// const toParsedMessageConsumer: ToParsedMessageConsumer = <T extends BaseSenderReceiver>(
+//   consumeFunction: T['consume'],
+// ) => (
+//   message,
+//   ) => {
+//     if (message == null) {
+//       throw new Error('null message');
+//     }
+//     return consumeFunction(toParsedMessage(message)) as ReturnType<T['consume']>;
+//   };
 
 class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
   declare channel;
@@ -214,69 +221,69 @@ class Queue<T extends BaseSenderReceiver> implements IQueue<T> {
     this.name = queue.queue;
   }
 
-  send: IQueue<T>['send'] = (message) => {
+  send: IQueue<T>['send'] = (...message: any): any => {
     this.channel.sendToQueue(this.name, message);
   };
 
-  sendRPC: IQueue<T>['sendRPC'] = (message) => new Promise<any>((resolve) => {
-    this.channel.assertQueue('', { exclusive: true })
-      .then((queue) => {
-        const uuid = uuidV4();
+  // sendRPC: IQueue<T>['sendRPC'] = (message) => new Promise<any>((resolve) => {
+  //   this.channel.assertQueue('', { exclusive: true })
+  //     .then((queue) => {
+  //       const uuid = uuidV4();
 
-        queue.setConsume((msg) => {
-          if (msg?.properties.correlationId === uuid) {
-            resolve(JSON.parse(msg.content.toString()));
-          }
-        }, { noAck: true });
-        this.channel.sendToQueue(this.name, message, {
-          correlationId: uuid,
-          replyTo: queue.name,
-        });
-      });
-  });
+  //       queue.setConsume((msg) => {
+  //         if (msg?.properties.correlationId === uuid) {
+  //           resolve(JSON.parse(msg.content.toString()));
+  //         }
+  //       }, { noAck: true });
+  //       this.channel.sendToQueue(this.name, message, {
+  //         correlationId: uuid,
+  //         replyTo: queue.name,
+  //       });
+  //     });
+  // });
 
   setConsume: IQueue<T>['setConsume'] = (
     consumeFunction,
     options?,
   ) => this.channel.consumeQueue(this.name, consumeFunction, options);
 
-  setConsumeRPC: IQueue<T>['setConsumeRPC'] = (
-    consumeFunction,
-    options?,
-  ) => this.channel.consumeQueue(this.name, consumeFunction, options);
+  // setConsumeRPC: IQueue<T>['setConsumeRPC'] = (
+  //   consumeFunction,
+  //   options?,
+  // ) => this.channel.consumeQueue(this.name, consumeFunction, options);
 }
 
-class Exchange<T extends BaseSenderReceiver> implements IExchange<T> {
-  declare channel;
+// class Exchange<T extends BaseSenderReceiver> implements IExchange<T> {
+//   declare channel;
 
-  declare name;
+//   declare name;
 
-  constructor(channel: IChannel, exchange: amqp.Replies.AssertExchange) {
-    this.channel = channel;
-    this.name = exchange.exchange;
-  }
+//   constructor(channel: IChannel, exchange: amqp.Replies.AssertExchange) {
+//     this.channel = channel;
+//     this.name = exchange.exchange;
+//   }
 
-  publish: IExchange<T>['publish'] = (message, routingKey = '') => {
-    this.channel.publish(this.name, message, routingKey);
-  };
-}
+//   publish: IExchange<T>['publish'] = (message, routingKey = '') => {
+//     this.channel.publish(this.name, message, routingKey);
+//   };
+// }
 
 class Channel<T extends BaseSendersReceivers> implements IChannel<T> {
   declare channel;
 
   declare queues: IChannel<T>['queues'];
 
-  declare exchanges: IChannel<T>['exchanges'];
+  // declare exchanges: IChannel<T>['exchanges'];
 
   constructor(channel: IChannel<T>['channel']) {
     this.channel = channel;
     this.queues = {};
-    this.exchanges = {};
+    // this.exchanges = {};
   }
 
   private isExistingQueue = (queueName: string) => (queueName in this.queues);
 
-  private isExistingExchange = (exchangeName: string) => (exchangeName in this.exchanges);
+  // private isExistingExchange = (exchangeName: string) => (exchangeName in this.exchanges);
 
   private checkQueueAlreadyExists = (queueName: string) => {
     if (this.isExistingQueue(queueName)) {
@@ -290,17 +297,17 @@ class Channel<T extends BaseSendersReceivers> implements IChannel<T> {
     }
   };
 
-  private checkExchangeAlreadyExists = (exchangeName: string) => {
-    if (this.isExistingExchange(exchangeName)) {
-      throw new Error(RABBITMQ.EXCHANGE_ALREADY_EXISTS);
-    }
-  };
+  // private checkExchangeAlreadyExists = (exchangeName: string) => {
+  //   if (this.isExistingExchange(exchangeName)) {
+  //     throw new Error(RABBITMQ.EXCHANGE_ALREADY_EXISTS);
+  //   }
+  // };
 
-  private checkExchangeNotExists = (exchangeName: string) => {
-    if (!this.isExistingExchange(exchangeName)) {
-      throw new Error(RABBITMQ.EXCHANGE_NOT_EXISTS);
-    }
-  };
+  // private checkExchangeNotExists = (exchangeName: string) => {
+  //   if (!this.isExistingExchange(exchangeName)) {
+  //     throw new Error(RABBITMQ.EXCHANGE_NOT_EXISTS);
+  //   }
+  // };
 
   close: IChannel<T>['close'] = () => new Promise((resolve) => {
     this.channel.close((error) => {
@@ -328,47 +335,47 @@ class Channel<T extends BaseSendersReceivers> implements IChannel<T> {
     });
   });
 
-  asserExchange: IChannel<T>['asserExchange'] = (
-    exchangeName,
-    exchangeType,
-    options?,
-  ) => new Promise((resolve) => {
-    const strExchangeName = exchangeName.toString();
+  // asserExchange: IChannel<T>['asserExchange'] = (
+  //   exchangeName,
+  //   exchangeType,
+  //   options?,
+  // ) => new Promise((resolve) => {
+  //   const strExchangeName = exchangeName.toString();
 
-    this.checkExchangeAlreadyExists(strExchangeName);
+  //   this.checkExchangeAlreadyExists(strExchangeName);
 
-    this.channel.assertExchange(strExchangeName, exchangeType, options, (error, exchange) => {
-      if (error) throw error;
+  //   this.channel.assertExchange(strExchangeName, exchangeType, options, (error, exchange) => {
+  //     if (error) throw error;
 
-      const exchangeClass = new Exchange<T[typeof exchangeName]>(this as unknown as IChannel, exchange);
-      this.exchanges[exchangeClass.name] = exchangeClass;
-      resolve(exchangeClass);
-    });
-  });
+  //     const exchangeClass = new Exchange<T[typeof exchangeName]>(this as unknown as IChannel, exchange);
+  //     this.exchanges[exchangeClass.name] = exchangeClass;
+  //     resolve(exchangeClass);
+  //   });
+  // });
 
-  bindQueue: IChannel<T>['bindQueue'] = (
-    queueName,
-    exchangeName,
-    pattern = '',
-    args?,
-  ) => new Promise((resolve) => {
-    const strExchangeName = exchangeName.toString();
+  // bindQueue: IChannel<T>['bindQueue'] = (
+  //   queueName,
+  //   exchangeName,
+  //   pattern = '',
+  //   args?,
+  // ) => new Promise((resolve) => {
+  //   const strExchangeName = exchangeName.toString();
 
-    this.checkQueueNotExists(queueName);
-    this.checkExchangeNotExists(strExchangeName);
+  //   this.checkQueueNotExists(queueName);
+  //   this.checkExchangeNotExists(strExchangeName);
 
-    this.channel.bindQueue(
-      this.queues[queueName].name,
-      strExchangeName,
-      pattern,
-      args,
-      (error) => {
-        if (error) throw error;
+  //   this.channel.bindQueue(
+  //     this.queues[queueName].name,
+  //     strExchangeName,
+  //     pattern,
+  //     args,
+  //     (error) => {
+  //       if (error) throw error;
 
-        resolve();
-      },
-    );
-  });
+  //       resolve();
+  //     },
+  //   );
+  // });
 
   consumeQueue: IChannel<T>['consumeQueue'] = (
     queueName,
@@ -410,21 +417,21 @@ class Channel<T extends BaseSendersReceivers> implements IChannel<T> {
     );
   };
 
-  publish: IChannel<T>['publish'] = (
-    exchangeName,
-    message,
-    routingKey = '',
-  ) => {
-    const strExchangeName = exchangeName.toString()
+  // publish: IChannel<T>['publish'] = (
+  //   exchangeName,
+  //   message,
+  //   routingKey = '',
+  // ) => {
+  //   const strExchangeName = exchangeName.toString()
 
-    this.checkExchangeNotExists(strExchangeName);
+  //   this.checkExchangeNotExists(strExchangeName);
 
-    this.channel.publish(
-      strExchangeName,
-      routingKey,
-      Buffer.from(JSON.stringify(message)),
-    );
-  };
+  //   this.channel.publish(
+  //     strExchangeName,
+  //     routingKey,
+  //     Buffer.from(JSON.stringify(message)),
+  //   );
+  // };
 }
 
 let connection: amqp.Connection | null = null;
@@ -479,147 +486,147 @@ export default class RabbitMQClient {
     return this.privateCreateChannel<T>();
   };
 
-  static createSender = async <T extends BaseSendersReceivers>(
-    queueName: T[keyof T]['queueName'],
-    channel?: IChannel<T>,
-    options: amqp.Options.AssertQueue = {},
-  ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
-    const queue = await currentChannel.assertQueue(queueName, { durable: false, ...options });
+  // static createSender = async <T extends BaseSendersReceivers>(
+  //   queueName: T[keyof T]['queueName'],
+  //   channel?: IChannel<T>,
+  //   options: amqp.Options.AssertQueue = {},
+  // ) => {
+  //   const currentChannel = channel != null ? channel : await this.createChannel<T>();
+  //   const queue = await currentChannel.assertQueue(queueName, { durable: false, ...options });
 
-    return {
-      channel: currentChannel,
-      queue,
-      name: queue.name as typeof queueName,
-    };
-  };
+  //   return {
+  //     channel: currentChannel,
+  //     queue,
+  //     name: queue.name as typeof queueName,
+  //   };
+  // };
 
-  static createPublisher = async <T extends BaseSendersReceivers>(
-    exchangeName: T[keyof T]['queueName'],
-    exchangeType: ExchangeTypes,
-    channel?: IChannel<T>,
-    options: amqp.Options.AssertExchange = {},
-  ) => {
-    const currentChannel = channel != null
-      ? channel
-      : await this.createChannel<T>();
-    const exchange = await currentChannel.asserExchange(
-      exchangeName,
-      exchangeType,
-      {
-        durable: false,
-        ...options,
-      },
-    );
+  // static createPublisher = async <T extends BaseSendersReceivers>(
+  //   exchangeName: T[keyof T]['queueName'],
+  //   exchangeType: ExchangeTypes,
+  //   channel?: IChannel<T>,
+  //   options: amqp.Options.AssertExchange = {},
+  // ) => {
+  //   const currentChannel = channel != null
+  //     ? channel
+  //     : await this.createChannel<T>();
+  //   const exchange = await currentChannel.asserExchange(
+  //     exchangeName,
+  //     exchangeType,
+  //     {
+  //       durable: false,
+  //       ...options,
+  //     },
+  //   );
 
-    return {
-      channel: currentChannel,
-      exchange,
-      name: exchange.name,
-    };
-  };
+  //   return {
+  //     channel: currentChannel,
+  //     exchange,
+  //     name: exchange.name,
+  //   };
+  // };
 
-  static createReceiver = async <T extends BaseSendersReceivers>(
-    queueName: keyof T,
-    consumeFunction: T[keyof T]['consume'],
-    prefetch?: number,
-    channel?: IChannel<T>,
-    assertOptions: amqp.Options.AssertQueue = {},
-    consumeOptions: amqp.Options.Consume = {},
-  ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
-    const queue = await currentChannel.assertQueue(
-      queueName,
-      { durable: false, ...assertOptions },
-    );
+  // static createReceiver = async <T extends BaseSendersReceivers>(
+  //   queueName: keyof T,
+  //   consumeFunction: T[keyof T]['consume'],
+  //   prefetch?: number,
+  //   channel?: IChannel<T>,
+  //   assertOptions: amqp.Options.AssertQueue = {},
+  //   consumeOptions: amqp.Options.Consume = {},
+  // ) => {
+  //   const currentChannel = channel != null ? channel : await this.createChannel<T>();
+  //   const queue = await currentChannel.assertQueue(
+  //     queueName,
+  //     { durable: false, ...assertOptions },
+  //   );
 
-    if (prefetch != null) {
-      currentChannel.channel.prefetch(1);
-    }
-    await queue.setConsume(
-      toParsedMessageConsumer(consumeFunction),
-      { noAck: true, ...consumeOptions },
-    );
-    return {
-      channel: currentChannel,
-      queue,
-      name: queue.name,
-    };
-  };
+  //   if (prefetch != null) {
+  //     currentChannel.channel.prefetch(1);
+  //   }
+  //   await queue.setConsume(
+  //     toParsedMessageConsumer(consumeFunction),
+  //     { noAck: true, ...consumeOptions },
+  //   );
+  //   return {
+  //     channel: currentChannel,
+  //     queue,
+  //     name: queue.name,
+  //   };
+  // };
 
-  static createReceiverRPC = async <T extends BaseSendersReceivers>(
-    queueName: T[keyof T]['queueName'],
-    consumeFunction: T[typeof queueName]['consumeRPC'],
-    prefetch?: number,
-    channel?: IChannel<T>,
-    assertOptions: amqp.Options.AssertQueue = {},
-    consumeOptions: amqp.Options.Consume = {},
-    sendResponseOptions: amqp.Options.Publish = {},
-  ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
+  // static createReceiverRPC = async <T extends BaseSendersReceivers>(
+  //   queueName: T[keyof T]['queueName'],
+  //   consumeFunction: T[typeof queueName]['consumeRPC'],
+  //   prefetch?: number,
+  //   channel?: IChannel<T>,
+  //   assertOptions: amqp.Options.AssertQueue = {},
+  //   consumeOptions: amqp.Options.Consume = {},
+  //   sendResponseOptions: amqp.Options.Publish = {},
+  // ) => {
+  //   const currentChannel = channel != null ? channel : await this.createChannel<T>();
 
-    return this.createReceiver(
-      queueName,
-      async (message) => {
-        if (message?.properties.replyTo != null) {
-          const consumeReturn = consumeFunction(message);
+  //   return this.createReceiver(
+  //     queueName,
+  //     async (message) => {
+  //       if (message?.properties.replyTo != null) {
+  //         const consumeReturn = consumeFunction(message);
 
-          currentChannel.sendToQueue(
-            message.properties.replyTo,
-            isPromise(consumeReturn) ? await consumeReturn : consumeReturn,
-            {
-              correlationId: message.properties.correlationId,
-              ...sendResponseOptions,
-            },
-          );
-        }
-      },
-      prefetch,
-      currentChannel,
-      assertOptions,
-      consumeOptions,
-    );
-  };
+  //         currentChannel.sendToQueue(
+  //           message.properties.replyTo,
+  //           isPromise(consumeReturn) ? await consumeReturn : consumeReturn,
+  //           {
+  //             correlationId: message.properties.correlationId,
+  //             ...sendResponseOptions,
+  //           },
+  //         );
+  //       }
+  //     },
+  //     prefetch,
+  //     currentChannel,
+  //     assertOptions,
+  //     consumeOptions,
+  //   );
+  // };
 
-  static createSubscriber = async <T extends BaseSendersReceivers>(
-    exchangeName: T[keyof T]['queueName'],
-    exchangeType: ExchangeTypes,
-    consumeFunction: T[typeof exchangeName]['consume'],
-    patterns: string[] = [''],
-    channel?: IChannel<T>,
-    exchangeOptions: amqp.Options.AssertExchange = {},
-    queueOptions: amqp.Options.AssertQueue = {},
-    consumeOptions: amqp.Options.Consume = {},
-  ) => {
-    const currentChannel = channel != null ? channel : await this.createChannel<T>();
-    const exchange = await currentChannel.asserExchange(
-      exchangeName,
-      exchangeType,
-      { durable: false, ...exchangeOptions },
-    );
-    const queue = await currentChannel.assertQueue(
-      '',
-      { exclusive: true, ...queueOptions },
-    );
+  // static createSubscriber = async <T extends BaseSendersReceivers>(
+  //   exchangeName: T[keyof T]['queueName'],
+  //   exchangeType: ExchangeTypes,
+  //   consumeFunction: T[typeof exchangeName]['consume'],
+  //   patterns: string[] = [''],
+  //   channel?: IChannel<T>,
+  //   exchangeOptions: amqp.Options.AssertExchange = {},
+  //   queueOptions: amqp.Options.AssertQueue = {},
+  //   consumeOptions: amqp.Options.Consume = {},
+  // ) => {
+  //   const currentChannel = channel != null ? channel : await this.createChannel<T>();
+  //   const exchange = await currentChannel.asserExchange(
+  //     exchangeName,
+  //     exchangeType,
+  //     { durable: false, ...exchangeOptions },
+  //   );
+  //   const queue = await currentChannel.assertQueue(
+  //     '',
+  //     { exclusive: true, ...queueOptions },
+  //   );
 
-    await Promise.all(
-      patterns.map(
-        (pattern) => currentChannel.bindQueue(
-          queue.name,
-          exchange.name,
-          pattern,
-        ),
-      ),
-    );
-    await queue.setConsume(
-      toParsedMessageConsumer(consumeFunction),
-      { noAck: true, ...consumeOptions },
-    );
-    return {
-      channel: currentChannel,
-      exchange,
-      queue,
-      name: exchange.name,
-    };
-  };
+  //   await Promise.all(
+  //     patterns.map(
+  //       (pattern) => currentChannel.bindQueue(
+  //         queue.name,
+  //         exchange.name,
+  //         pattern,
+  //       ),
+  //     ),
+  //   );
+  //   await queue.setConsume(
+  //     toParsedMessageConsumer(consumeFunction),
+  //     { noAck: true, ...consumeOptions },
+  //   );
+  //   return {
+  //     channel: currentChannel,
+  //     exchange,
+  //     queue,
+  //     name: exchange.name,
+  //   };
+  // };
 }
