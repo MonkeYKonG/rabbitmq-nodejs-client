@@ -1,4 +1,4 @@
-import RabbitMQClient, { BaseSendersReceivers } from "../src/rabbitmq";
+import RabbitMQClient, { BaseSendersReceivers, BaseArguments, BaseArgument } from "../src/rabbitmq";
 
 enum enumOne {
   ONE_ONE = 'one_one',
@@ -11,13 +11,29 @@ enum enumTwo {
 }
 
 type MessageTypeOne = {
-  [enumOne.ONE_ONE]: { a: string };
-  [enumOne.ONE_TWO]: { b: string };
+  [enumOne.ONE_ONE]: {
+    'hello': { argument: string, return: void },
+    'bonjour': { argument: string, return: void },
+  };
+  [enumOne.ONE_TWO]: {
+    'World': { argument: string, return: void },
+    'Monde': { argument: number, return: void },
+  };
 }
 
 type MessageTypeTwo = {
-  [enumTwo.TWO_ONE]: { c: string };
-  [enumTwo.TWO_TWO]: { d: string };
+  [enumTwo.TWO_ONE]: {
+    'marco': { argument: string, return: void },
+    'james': { argument: string, return: void }
+  };
+  [enumTwo.TWO_TWO]: {
+    'pollo': { argument: string, return: void },
+    'cook': { argument: string, return: void }
+  };
+}
+
+type MKeys = {
+  [key in keyof MessageTypeOne]: keyof MessageTypeOne[key];
 }
 
 type SenderReceiverOne = BaseSendersReceivers<enumOne, MessageTypeOne>;
@@ -26,18 +42,18 @@ type SenderReceiverTwo = BaseSendersReceivers<enumTwo, MessageTypeTwo>;
 type SendersReceivers = SenderReceiverOne & SenderReceiverTwo;
 
 const main = async () => {
-  const channel = await RabbitMQClient.createChannel<SendersReceivers>();
+  const channel = await RabbitMQClient.createChannel<SenderReceiverOne>();
 
-  const senderOne = await RabbitMQClient.createSender<SendersReceivers[enumOne.ONE_ONE]>(
+  const senderOne = await RabbitMQClient.createSender<SendersReceivers>(
     enumOne.ONE_ONE,
     channel,
   );
-  const senderTwo = await RabbitMQClient.createSender<SendersReceivers[enumTwo.TWO_TWO]>(
+  const senderTwo = await RabbitMQClient.createSender<SendersReceivers>(
     enumTwo.TWO_TWO,
     channel,
   );
 
-  senderOne.queue.send({ a: "hello" });
+  senderOne.queue.send('string');
   senderTwo.queue.send({ d: "hello" });
 
   await RabbitMQClient.createReceiver<SendersReceivers[enumOne.ONE_ONE]>(enumOne.ONE_ONE, (message) => {
