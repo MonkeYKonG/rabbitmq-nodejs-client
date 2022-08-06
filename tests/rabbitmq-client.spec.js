@@ -31,9 +31,9 @@ describe('Creations', () => {
   describe('Sender', () => {
     test('Create named queue', async () => {
       const queueName = 'testQueue';
-      const { channel, queue, name } = await RabbitMQClient.createSender(queueName);
+      const channel = await RabbitMQClient.createChannel();
+      const queue = await channel.createSender(queueName);
 
-      expect(name).toBe(queueName);
       expect(queue.name).toBe(queueName);
       expect(channel.queues[queueName]).not.toBe(undefined);
       await channel.close();
@@ -41,11 +41,11 @@ describe('Creations', () => {
 
     test('Create unnamed queue', async () => {
       const queueName = '';
-      const { channel, queue, name } = await RabbitMQClient.createSender(queueName);
+      const channel = await RabbitMQClient.createChannel();
+      const queue = await channel.createSender(queueName);
 
-      expect(name).not.toBe(queueName);
-      expect(queue.name).toBe(name);
-      expect(channel.queues[name]).not.toBe(undefined);
+      expect(queue.name).not.toBe(queueName);
+      expect(channel.queues[queue.name]).not.toBe(undefined);
       await channel.close();
     });
   });
@@ -53,9 +53,9 @@ describe('Creations', () => {
   describe('Receiver', () => {
     test('Create named queue', async () => {
       const queueName = 'testQueue';
-      const { channel, queue, name } = await RabbitMQClient.createReceiver(queueName);
+      const channel = await RabbitMQClient.createChannel();
+      const queue = await channel.createReceiver(queueName, () => null);
 
-      expect(name).toBe(queueName);
       expect(queue.name).toBe(queueName);
       expect(channel.queues[queueName]).not.toBe(undefined);
       await channel.close();
@@ -63,11 +63,11 @@ describe('Creations', () => {
 
     test('Create unnamed queue', async () => {
       const queueName = '';
-      const { channel, queue, name } = await RabbitMQClient.createReceiver(queueName);
+      const channel = await RabbitMQClient.createChannel();
+      const queue = await channel.createReceiver(queueName, () => null);
 
-      expect(name).not.toBe(queueName);
-      expect(queue.name).toBe(name);
-      expect(channel.queues[name]).not.toBe(undefined);
+      expect(queue.name).not.toBe(queueName);
+      expect(channel.queues[queue.name]).not.toBe(undefined);
       await channel.close();
     });
   });
@@ -75,11 +75,11 @@ describe('Creations', () => {
   describe('Publisher', () => {
     test('Create named publisher', async () => {
       const exchangeName = 'testExchange';
-      const { channel, exchange, name } = await RabbitMQClient.createPublisher(exchangeName, 'fanout');
+      const channel = await RabbitMQClient.createChannel();
+      const exchange = await channel.createPublisher(exchangeName, 'fanout');
 
-      expect(name).toBe(exchangeName);
-      expect(exchange.name).toBe(name);
-      expect(channel.exchanges[name]).not.toBe(undefined);
+      expect(exchange.name).toBe(exchangeName);
+      expect(channel.exchanges[exchangeName]).not.toBe(undefined);
       await channel.close();
     });
   });
@@ -87,12 +87,11 @@ describe('Creations', () => {
   describe('Subscriber', () => {
     test('Create named Subscriber', async () => {
       const exchangeName = 'testExchange';
-      const { channel, exchange, queue, name } = await RabbitMQClient.createSubscriber(exchangeName, 'fanout');
+      const channel = await RabbitMQClient.createChannel();
+      const { exchange, queue } = await channel.createSubscriber(exchangeName, 'fanout', () => null);
 
-      expect(name).toBe(exchangeName);
-      expect(name).not.toBe(queue.name);
-      expect(exchange.name).toBe(name);
-      expect(channel.exchanges[name]).not.toBe(undefined);
+      expect(exchange.name).toBe(exchangeName);
+      expect(channel.exchanges[exchangeName]).not.toBe(undefined);
       expect(channel.queues[queue.name]).not.toBe(undefined);
       await channel.close();
     });
@@ -113,16 +112,19 @@ describe('Sender Receiver', () => {
     const testMessage = 'My test message';
     const queueName = 'testQueue';
 
-    Promise.all([
-      RabbitMQClient.createSender(queueName),
-      RabbitMQClient.createReceiver(queueName, (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toBe(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.queue.send(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createSender(queueName),
+          channel.createReceiver(queueName, (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toBe(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.queue.send(testMessage);
+        });
+      });
   });
 
   test('Send JSON', (done) => {
@@ -130,16 +132,19 @@ describe('Sender Receiver', () => {
     const testMessage = { message: 'My test message' };
     const queueName = 'testQueue';
 
-    Promise.all([
-      RabbitMQClient.createSender(queueName),
-      RabbitMQClient.createReceiver(queueName, (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toMatchObject(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.queue.send(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createSender(queueName),
+          channel.createReceiver(queueName, (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toMatchObject(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.queue.send(testMessage);
+        });
+      });
   });
 
   test('Async receiver', (done) => {
@@ -147,16 +152,19 @@ describe('Sender Receiver', () => {
     const testMessage = 'My test message';
     const queueName = 'testQueue';
 
-    Promise.all([
-      RabbitMQClient.createSender(queueName),
-      RabbitMQClient.createReceiver(queueName, async (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toBe(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.queue.send(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createSender(queueName),
+          channel.createReceiver(queueName, async (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toBe(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.queue.send(testMessage);
+        });
+      });
   });
 });
 
@@ -174,16 +182,19 @@ describe('Publisher Subscriber', () => {
     const testMessage = 'My test message';
     const exchangeName = 'testExchange';
 
-    Promise.all([
-      RabbitMQClient.createPublisher(exchangeName, 'fanout'),
-      RabbitMQClient.createSubscriber(exchangeName, 'fanout', (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toBe(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.exchange.publish(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createPublisher(exchangeName, 'fanout'),
+          channel.createSubscriber(exchangeName, 'fanout', (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toBe(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.exchange.publish(testMessage);
+        });
+      });
   });
 
   test('Send JSON', (done) => {
@@ -191,16 +202,19 @@ describe('Publisher Subscriber', () => {
     const testMessage = { message: 'My test message' };
     const exchangeName = 'testExchange';
 
-    Promise.all([
-      RabbitMQClient.createPublisher(exchangeName, 'fanout'),
-      RabbitMQClient.createSubscriber(exchangeName, 'fanout', (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toMatchObject(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.exchange.publish(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createPublisher(exchangeName, 'fanout'),
+          channel.createSubscriber(exchangeName, 'fanout', (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toMatchObject(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.exchange.publish(testMessage);
+        });
+      });
   });
 
   test('Async subscriber', (done) => {
@@ -208,16 +222,19 @@ describe('Publisher Subscriber', () => {
     const testMessage = 'My test message';
     const exchangeName = 'testExchange';
 
-    Promise.all([
-      RabbitMQClient.createPublisher(exchangeName, 'fanout'),
-      RabbitMQClient.createSubscriber(exchangeName, 'fanout', async (message) => {
-        expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
-        expect(message.content).toBe(testMessage);
-        done();
-      }),
-    ]).then(([sender, receiver]) => {
-      sender.exchange.publish(testMessage);
-    });
+    RabbitMQClient.createChannel()
+      .then((channel) => {
+        Promise.all([
+          channel.createPublisher(exchangeName, 'fanout'),
+          channel.createSubscriber(exchangeName, 'fanout', async (message) => {
+            expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
+            expect(message.content).toBe(testMessage);
+            done();
+          }),
+        ]).then(([sender]) => {
+          sender.exchange.publish(testMessage);
+        });
+      });
   });
 });
 
@@ -235,13 +252,14 @@ describe('RPC', () => {
     const testMessage = 'My test message';
     const testResponse = 'My test response';
     const queueName = 'testQueue';
+    const channel = await RabbitMQClient.createChannel();
 
-    await RabbitMQClient.createReceiverRPC(queueName, (message) => {
+    await channel.createReceiverRPC(queueName, (message) => {
       expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
       expect(message.content).toBe(testMessage);
       return testResponse;
     });
-    const { queue } = await RabbitMQClient.createSender(queueName);
+    const { queue } = await channel.createSender(queueName);
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toBe(testResponse);
@@ -252,13 +270,14 @@ describe('RPC', () => {
     const testMessage = { message: 'My test message' };
     const testResponse = 'My test response';
     const queueName = 'testQueue';
+    const channel = await RabbitMQClient.createChannel();
 
-    await RabbitMQClient.createReceiverRPC(queueName, (message) => {
+    await channel.createReceiverRPC(queueName, (message) => {
       expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
       expect(message.content).toMatchObject(testMessage);
       return testResponse;
     });
-    const { queue } = await RabbitMQClient.createSender(queueName);
+    const { queue } = await channel.createSender(queueName);
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toBe(testResponse);
@@ -269,13 +288,14 @@ describe('RPC', () => {
     const testMessage = 'My test message';
     const testResponse = { message: 'My test response' };
     const queueName = 'testQueue';
+    const channel = await RabbitMQClient.createChannel();
 
-    await RabbitMQClient.createReceiverRPC(queueName, (message) => {
+    await channel.createReceiverRPC(queueName, (message) => {
       expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
       expect(message.content).toBe(testMessage);
       return testResponse;
     });
-    const { queue } = await RabbitMQClient.createSender(queueName);
+    const { queue } = await channel.createSender(queueName);
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toMatchObject(testResponse);
@@ -286,13 +306,14 @@ describe('RPC', () => {
     const testMessage = { message: 'My test message' };
     const testResponse = { message: 'My test response' };
     const queueName = 'testQueue';
+    const channel = await RabbitMQClient.createChannel();
 
-    await RabbitMQClient.createReceiverRPC(queueName, (message) => {
+    await channel.createReceiverRPC(queueName, (message) => {
       expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
       expect(message.content).toMatchObject(testMessage);
       return testResponse;
     });
-    const { queue } = await RabbitMQClient.createSender(queueName);
+    const { queue } = await channel.createSender(queueName);
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toMatchObject(testResponse);
@@ -303,13 +324,14 @@ describe('RPC', () => {
     const testMessage = 'My test message';
     const testResponse = 'My test response';
     const queueName = 'testQueue';
+    const channel = await RabbitMQClient.createChannel();
 
-    await RabbitMQClient.createReceiverRPC(queueName, async (message) => {
+    await channel.createReceiverRPC(queueName, async (message) => {
       expect(Object.keys(message)).toEqual(expect.arrayContaining(expectedMessageKeys));
       expect(message.content).toBe(testMessage);
       return testResponse;
     });
-    const { queue } = await RabbitMQClient.createSender(queueName);
+    const { queue } = await channel.createSender(queueName);
     const response = await queue.sendRPC(testMessage);
 
     expect(response).toBe(testResponse);
