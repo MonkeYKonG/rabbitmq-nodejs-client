@@ -25,33 +25,33 @@ A channel allow you to create queues or exchanges into.
 ```javascript
 const channel = await RabbitMQClient.createChannel();
 const queue = channel.assertQueue('My queue');
-const exchange = channel.assertExchange('My exchange');
+const exchange = channel.assertExchange('My exchange', 'fanout');
 ```
 ## Create sender
 A sender is linked to a Queue and let you send messages into.
 ```javascript
-const { channel, queue, name } = await RabbitMQClient.createSender('MyQueueName');
+const queue = await channel.createSender('MyQueueName');
 
 queue.send('My message');
 ```
 ## Create publisher
 A publisher is linked to an exchange and let you publish messages into.
 ```javascript
-const { channel, exchange, name } = await RabbitMQClient.createPublisher('My exchange', 'fanout');
+const exchange = await channel.createPublisher('My exchange', 'fanout');
 
 exchange.publish('My message', 'routing.keys');
 ```
 ## Create Receiver
 A receiver is linked to a queue and let you consume messages into.
 ```javascript
-const { channel, queue, name} = await RabbitMQClient.createReceiver('My Queue', (message) => {
+const queue = await channel.createReceiver('My Queue', (message) => {
   console.log('Message receive:', message);
 });
 ```
 ## Create Subscriber 
 A subscriber is linked to an exchange and let you consume messages into from queue.
 ```javascript
-const { channel, exchange, queue, name } = await RabbitMQClient.createSubscriber('My exchange', 'fanout', (message) => {
+const { exchange, queue } = await channel.createSubscriber('My exchange', 'fanout', (message) => {
   console.log('Message receive:', message);
 }, ['routing.patterns', 'routing.*.keys']);
 ```
@@ -60,23 +60,16 @@ const { channel, exchange, queue, name } = await RabbitMQClient.createSubscriber
 ## Create server
 RPC server is managed using a Receiver.
 ```javascript
-const { channel, queue, name } = await RabbitMQClient.createReceiverRPC('My rpc function', (message) => {
+const queue = await channel.createReceiverRPC('My rpc function', (message) => {
   return myRPCStuff(message);
 });
 ```
 ## Create client
 RPC client is managed using a Sender.
 ```javascript
-const { channel, queue, name } = await RabbitMQClient.createSender('My rpc function');
+const queue = await RabbitMQClient.createSender('My rpc function');
 
 const response = await queue.sendRPC('My rpc arguments');
-```
-## Create server JSON
-A JSON version on the rpc server give you JSON object on consume function.
-```javascript
-const { channel, queue, name } = await RabbitMQClient.createReceiverRPCJson('My json rpc function', (message) => {
-  return myJsonRPCStuff(message);
-});
 ```
 # Typescript
 `RabbitMQClient` allow you to define schema for send, publish and consume message type.

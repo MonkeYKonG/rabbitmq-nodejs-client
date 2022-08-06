@@ -16,26 +16,46 @@ type Command<T extends string = string, U = any> = {
 };
 
 type MessageTypeOne = {
-  [enumOne.ONE_ONE]: {
-    'hello': {
+  [enumOne.ONE_ONE]: [
+    {
       argument: Command<'hey', { a: string, b: number }>,
       return: void,
     },
-    'bonjour': {
+    {
       argument: Command<'salut', { c: string, d: number }>,
       return: void,
     },
-  };
-  [enumOne.ONE_TWO]: {
-    'World': {
+  ];
+  // [enumOne.ONE_ONE]: {
+  //   'hello': {
+  //     argument: Command<'hey', { a: string, b: number }>,
+  //     return: void,
+  //   },
+  //   'bonjour': {
+  //     argument: Command<'salut', { c: string, d: number }>,
+  //     return: void,
+  //   },
+  // };
+  [enumOne.ONE_TWO]: [
+    {
       argument: Command<'Earth', { e: boolean, f: number }>,
       return: void,
     },
-    'Monde': {
+    {
       argument: Command<'Terre', { g: string, h: number }>,
       return: void,
     },
-  };
+  ];
+  // [enumOne.ONE_TWO]: {
+  //   'World': {
+  //     argument: Command<'Earth', { e: boolean, f: number }>,
+  //     return: void,
+  //   },
+  //   'Monde': {
+  //     argument: Command<'Terre', { g: string, h: number }>,
+  //     return: void,
+  //   },
+  // };
 }
 
 type MessageTypeTwo = {
