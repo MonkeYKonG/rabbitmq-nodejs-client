@@ -15,7 +15,7 @@ describe('Connection', () => {
       await expect(RabbitMQClient.connect('UNKNOW')).rejects.toThrow(/getaddrinfo [\w_]+ unknow/);
       expect(RabbitMQClient.isConnected()).toBe(false);
       expect(RabbitMQClient.isDisconnected()).toBe(true);
-    });
+    }, 5000);
   });
 });
 
