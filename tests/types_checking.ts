@@ -1,4 +1,4 @@
-import RabbitMQClient from "../src/rabbitmq";
+import RabbitMQClient, { MessagesDefinition } from "../src/rabbitmq";
 
 enum enumOne {
   ONE_ONE = 'one_one',
@@ -26,16 +26,6 @@ type MessageTypeOne = {
       return: void,
     },
   ];
-  // [enumOne.ONE_ONE]: {
-  //   'hello': {
-  //     argument: Command<'hey', { a: string, b: number }>,
-  //     return: void,
-  //   },
-  //   'bonjour': {
-  //     argument: Command<'salut', { c: string, d: number }>,
-  //     return: void,
-  //   },
-  // };
   [enumOne.ONE_TWO]: [
     {
       argument: Command<'Earth', { e: boolean, f: number }>,
@@ -46,17 +36,8 @@ type MessageTypeOne = {
       return: void,
     },
   ];
-  // [enumOne.ONE_TWO]: {
-  //   'World': {
-  //     argument: Command<'Earth', { e: boolean, f: number }>,
-  //     return: void,
-  //   },
-  //   'Monde': {
-  //     argument: Command<'Terre', { g: string, h: number }>,
-  //     return: void,
-  //   },
-  // };
 }
+
 
 type MessageTypeTwo = {
   [enumTwo.TWO_ONE]: {
@@ -70,9 +51,10 @@ type MessageTypeTwo = {
 }
 
 type Arguments = MessageTypeOne & MessageTypeTwo;
+type Definitions = MessagesDefinition<Arguments>;
 
 const main = async () => {
-  const channel = await RabbitMQClient.createChannel<Arguments>();
+  const channel = await RabbitMQClient.createChannel<Definitions>();
 
   const senderOne = await channel.createSender(
     enumOne.ONE_ONE,
@@ -98,7 +80,7 @@ const main = async () => {
 };
 
 const main2 = async () => {
-  const channel = await RabbitMQClient.createChannel<Arguments>();
+  const channel = await RabbitMQClient.createChannel<Definitions>();
 
   const publisherOne = await channel.createPublisher(
     enumOne.ONE_TWO,

@@ -1,5 +1,4 @@
-/* eslint-disable max-len */
-/* eslint-disable max-classes-per-file */
+/* eslint-disable max-len, max-classes-per-file */
 import * as dotenv from 'dotenv';
 import amqp from 'amqplib/callback_api';
 import { v4 as uuidV4 } from 'uuid';
@@ -8,6 +7,10 @@ import { RABBITMQ } from './errors';
 
 dotenv.config();
 
+type IterableIndexes<
+  T extends any[]
+  > = Exclude<keyof T, keyof any[]>;
+
 type FunctionsIntersection<T extends Record<any, (...args: any) => any>> = {
   [K in keyof T]: (x: T[K]) => any
 }[keyof T] extends
@@ -15,23 +18,36 @@ type FunctionsIntersection<T extends Record<any, (...args: any) => any>> = {
 
 type KeyOf = string | number | symbol;
 
-interface BaseArgumentBody<Args extends any = any, Return extends any = any> {
+interface BaseArgumentBody<Args = any, Return = any> {
   argument: Args;
   return: Return;
 }
-type BaseArgument<Keys extends number = number> = {
-  [k in Keys]: BaseArgumentBody<any, any>;
-}
-type BaseArgumentRPC<Keys extends number = number> = {
-  [k in Keys]: BaseArgumentBody<any, any>;
+type BaseArgument<T extends KeyOf = string> = {
+  [k in T]: BaseArgumentBody<any, any>;
 };
+type BaseArgumentRPC = {
+  [k: KeyOf]: BaseArgumentBody<any, any>;
+};
+
+type BaseArgumentComplete = BaseArgument<KeyOf> | [BaseArgumentBody, ...BaseArgumentBody[]];
 
 type BaseArguments<
   T extends KeyOf,
-  U extends { [key in T]: number } = { [key in T]: number }
   > = {
-    [key in T]: BaseArgument<U[key]>
+    [key in T]: BaseArgument<KeyOf>;
   };
+
+type BaseArgumentsComplete<T extends KeyOf> = {
+  [key in T]: BaseArgumentComplete;
+}
+
+type ToMap<T extends any[]> = {
+  [K in IterableIndexes<T>]: T[K];
+};
+
+export type MessagesDefinition<T extends BaseArgumentsComplete<string>> = {
+  [key in keyof T]: T[key] extends [BaseArgumentBody, ...BaseArgumentBody[]] ? ToMap<T[key]> : T[key];
+};
 
 type SendToQueueMessage = any;
 
@@ -50,7 +66,7 @@ type BaseSendFunction<T extends BaseArgumentBody> = (
 type BaseSendFunctions<
   Argument extends BaseArgument,
   > = {
-    [key in keyof Argument]: BaseSendFunction<Argument[key]>;
+    [key in keyof Argument]: BaseSendFunction<Argument[key]>
   };
 
 type BaseSendRPCFunction<T extends BaseArgumentBody> = (
@@ -586,7 +602,7 @@ export default class RabbitMQClient {
     });
   });
 
-  private static privateCreateChannel = <T extends BaseArguments<keyof T>>() => new Promise<IChannel<T>>((resolve) => {
+  private static privateCreateChannel = <T extends BaseArguments<string>>() => new Promise<IChannel<T>>((resolve) => {
     connection?.createChannel((error, channel) => {
       if (error) throw error;
 
@@ -594,7 +610,9 @@ export default class RabbitMQClient {
     });
   });
 
-  static createChannel = async <T extends BaseArguments<keyof T> = BaseArguments<string>>(): Promise<IChannel<T>> => {
+  static createChannel = async <
+    T extends BaseArguments<KeyOf> = BaseArguments<KeyOf>,
+    >() => {
     if (this.isDisconnected()) {
       await this.connect();
     }
