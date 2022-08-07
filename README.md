@@ -1,3 +1,6 @@
+# TODO
+- Update typescript part
+- Test create Recerver / Subscriber / Publisher / Sender on RabbitMQClient if types can be managed correctly
 # Description
 Quick and easy client for contacting RabbitMQ server.
 # Installation
