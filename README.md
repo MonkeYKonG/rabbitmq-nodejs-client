@@ -28,7 +28,7 @@ const queue = channel.assertQueue('My queue');
 const exchange = channel.assertExchange('My exchange', 'fanout');
 ```
 ## Create sender
-A sender is linked to a Queue and let you send messages into.
+A sender is linked to a queue and let you send messages into.
 ```javascript
 const queue = await channel.createSender('MyQueueName');
 
@@ -120,7 +120,7 @@ type Arguments = MessageTypeOne & MessageTypeTwo;
 type Definitions = MessagesDefinition<Arguments>;
 ```
 ## Using schema
-You can use `MySendersReceivers` to let `RabbitMQClient` know the type of messages.
+You can use `Definitions` to let `RabbitMQClient` know the type of messages.
 ### Sender
 ```typescript
 const channel = await RabbitMQClient.createChannel<Definitions>();
@@ -201,6 +201,23 @@ await channel.close();
 ```
 ## Defining RPC schema
 ```typescript
+import { MessagesDefinition, ArgumentBody } from '@enchiladas/rabbitmq-nodejs-client';
+
+enum enumOne {
+  ONE_ONE = 'one_one',
+  ONE_TWO = 'one_two',
+}
+
+enum enumTwo {
+  TWO_ONE = 'two_one',
+  TWO_TWO = 'two_two',
+}
+
+type Command<T extends string = string, U = any> = {
+  command: T;
+  args: U;
+};
+
 type ErrorReturn<T extends boolean> = { error: T };
 type SuccessReturn = ErrorReturn<false>;
 type FailureReturn = ErrorReturn<true>;
