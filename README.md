@@ -1,6 +1,3 @@
-# TODO
-- Update typescript part
-- Test create Recerver / Subscriber / Publisher / Sender on RabbitMQClient if types can be managed correctly
 # Description
 Quick and easy client for contacting RabbitMQ server.
 # Installation
@@ -70,7 +67,7 @@ const queue = await channel.createReceiverRPC('My rpc function', (message) => {
 ## Create client
 RPC client is managed using a Sender.
 ```javascript
-const queue = await RabbitMQClient.createSender('My rpc function');
+const queue = await cannel.createSender('My rpc function');
 
 const response = await queue.sendRPC('My rpc arguments');
 ```
@@ -79,95 +76,215 @@ const response = await queue.sendRPC('My rpc arguments');
 ## Defining schema
 Schema can be define by give your queues and exchanges names and message type on template fields.
 ```typescript
-enum Queues {
-  REFRESH = 'refresh',
-  START = 'start',
+import { MessagesDefinition, ArgumentBody } from '@enchiladas/rabbitmq-nodejs-client';
+
+enum enumOne {
+  ONE_ONE = 'one_one',
+  ONE_TWO = 'one_two',
 }
 
-enum Exchanges {
-  REFRESH_ALL = 'refresh_all',
-  START_ALL = 'start_all',
+enum enumTwo {
+  TWO_ONE = 'two_one',
+  TWO_TWO = 'two_two',
 }
 
-type MessageTypes = {
-  [Queues.REFRESH]: { delay: number },
-  [Queues.START]: { args: string },
-  [Exchanges.REFRESH_ALL]: {delay: number, userId: number},
-  [Exchanges.START_ALL]: {args: string[], userId: number},
+type Command<T extends string = string, U = any> = {
+  command: T;
+  args: U;
 };
 
-type MySendersReceivers = BaseSenders<Queues & Exchanges, MessageTypes>;
+type MessageTypeOne = {
+  [enumOne.ONE_ONE]: [
+    ArgumentBody<Command<'cmd_a', { a: string, b: number }>, void>,
+    ArgumentBody<Command<'cmd_b', { c: string, d: number }>, void>,
+  ];
+  [enumOne.ONE_TWO]: [
+    ArgumentBody<Command<'cmd_c', { e: boolean, f: number }>, void>,
+    ArgumentBody<Command<'cmd_d', { g: string, h: number }>, void>,
+  ];
+}
+
+
+type MessageTypeTwo = {
+  [enumTwo.TWO_ONE]: {
+    'cmd_name_a': ArgumentBody<boolean, void>,
+    'cmd_name_b': ArgumentBody<string, void>,
+  };
+  [enumTwo.TWO_TWO]: {
+    'cmd_name_b': ArgumentBody<number, void>,
+    'cmd_name_c': ArgumentBody<string, void>,
+  };
+}
+
+type Arguments = MessageTypeOne & MessageTypeTwo;
+type Definitions = MessagesDefinition<Arguments>;
 ```
 ## Using schema
 You can use `MySendersReceivers` to let `RabbitMQClient` know the type of messages.
 ### Sender
 ```typescript
-// Typescript Error: 'My Queue' is not a valide queueName
-const { channel, queue, name } = await RabbitMQClient.createSender<MySendersReceivers>('My Queue');
+const channel = await RabbitMQClient.createChannel<Definitions>();
 
-const { channel, queue, name } = await RabbitMQClient.createSender<MySendersReceivers>(Queues.REFRESH);
+const senderOne = await channel.createSender(
+  enumOne.ONE_ONE,
+);
+const senderTwo = await channel.createSender(
+  enumTwo.TWO_TWO,
+);
 
-// Typescript Error: Expect type { delay: number }
-queue.send({ param: 'value' });
-// Valid
-queue.send({ delay: 10 });
+// must be Command<'cmd_a', { a: string, b: number }> | Command<'cmd_b', { c: string, d: number }>
+senderOne.send({ command: 'cmd_a', args: { a: 'hello', b: 23 } });
+senderOne.send({ command: 'cmd_b', args: { c: 'world', d: 23 } });
+
+// must be string | number
+senderTwo.send('hello');
+senderTwo.send(12);
+
+await channel.close();
 ```
 ### Publisher
 ```typescript
-// Typescript Error: 'My Exchange' is not a valide exchangeName
-const { channel, exchange, name } = await RabbitMQClient.createPublisher<MySendersReceivers>('My Exchange');
+const channel = await RabbitMQClient.createChannel<Definitions>();
 
-const { channel, exchange, name } = await RabbitMQClient.createPublisher<MySendersReceivers>(Exchanges.REFRESH);
+const publisherOne = await channel.createPublisher(
+  enumOne.ONE_TWO,
+  'fanout',
+);
+const publisherTwo = await channel.createPublisher(
+  enumTwo.TWO_ONE,
+  'direct',
+);
 
-// Typescript Error: Expect type { delay: number, userId: number }
-exchange.publish({ param: 'value' }, 'routing.keys');
-// Valid
-exchange.publish({ delay: 10, userId: 1 }, 'routing.keys');
+// must be Command<'cmd_c', { e: boolean, f: number }> | Command<'cmd_d', { g: string, h: number }>
+publisherOne.publish({ command: 'cmd_c', args: { e: true, f: 54 } });
+publisherOne.publish({ command: 'cmd_d', args: { g: 'hello', h: 54 } });
+
+// must be boolean | string
+publisherTwo.publish('hello');
+publisherTwo.publish(false);
+
+await channel.close();
 ```
 ### Receiver
 ```typescript
-// Typescript Error: 'My Queue' is not a valide queueName
-const { channel, queue, name } = await RabbitMQClient.createReceiver<MySendersReceivers>('My Queue', (message) => {
-  console.log('Message receive:', message);
+const channel = await RabbitMQClient.createChannel<Definitions>();
+
+await channel.createReceiver(enumOne.ONE_ONE, (message) => {
+  console.log(message.content.command); // 'cmd_a' | 'cmd_b'
 });
 
-const { channel, queue, name } = await RabbitMQClient.createReceiver<MySendersReceivers>(Queues.START, (message) => {
-  // message is automatically typed { args: string }
-  console.log('Message receive:', message.args);
+await channel.createReceiver(enumTwo.TWO_TWO, (message) => {
+  console.log(message.content); // srting | number
 });
+
+await channel.close();
 ```
 ### Subscriber
 ```typescript
-// Typescript Error: 'My Exchange' is not a valide exchangeName
-const { channgel, exchange, name } = await RabbitMQClient.createSubscriber<MySendersReceivers>('My exchange', 'fanout', (message) => {
-  console.log('Message receive:', message);
-}, ['routing.*']);
+const channel = await RabbitMQClient.createChannel<Definitions>();
 
-const { channgel, exchange, name } = await RabbitMQClient.createSubscriber<MySendersReceivers>(Exchanges.START_ALL, 'fanout', (message) => {
-  // message is automatically typed { args: string[], userId: number }
-  console.log('Message receive:', message.args.join('.'), message.userId);
-}, ['routing.*']);
+await channel.createSubscriber(
+  enumOne.ONE_TWO,
+  'fanout',
+  (message) => {
+    console.log(message.content.command); // 'cmd_c' | 'cmd_d'
+  });
+
+await channel.createSubscriber(
+  enumTwo.TWO_ONE,
+  'fanout',
+  (message) => {
+    console.log(message.content); // boolean | string
+  });
+
+await channel.close();
 ```
 ## Defining RPC schema
 ```typescript
-type ReturnTypes = {
-  [Queues.REFRESH]: { error: boolean },
-  [Queues.START]: { pid: number },
-};
+type ErrorReturn<T extends boolean> = { error: T };
+type SuccessReturn = ErrorReturn<false>;
+type FailureReturn = ErrorReturn<true>;
 
-type MyRPCSendersReceivers = BaseSendersReceiversRPC<Queues, MessageTypes, ReturnTypes>;
+type MessageTypeRPCOne = {
+  [enumOne.ONE_ONE]: [
+    ArgumentBody<Command<'cmd_a', { a: string, b: number }>, SuccessReturn & { a: string }>,
+    ArgumentBody<Command<'cmd_b', { c: string, d: number }>, SuccessReturn & { b: number }>,
+  ];
+  [enumOne.ONE_TWO]: [
+    ArgumentBody<Command<'cmd_c', { e: boolean, f: number }>, SuccessReturn | FailureReturn>,
+    ArgumentBody<Command<'cmd_d', { g: string, h: number }>, FailureReturn & { message: string }>,
+  ];
+}
+
+
+type MessageTypeRPCTwo = {
+  [enumTwo.TWO_ONE]: {
+    'cmd_name_a': ArgumentBody<boolean, string>,
+    'cmd_name_b': ArgumentBody<string, number>,
+  };
+  [enumTwo.TWO_TWO]: {
+    'cmd_name_b': ArgumentBody<number, number>,
+    'cmd_name_c': ArgumentBody<string, string>,
+  };
+}
+
+type ArgumentsRPC = MessageTypeRPCOne & MessageTypeRPCTwo;
+type DefinitionsRPC = MessagesDefinition<ArgumentsRPC>;
 ```
 ### Client
 ```typescript
-const { channel, queue, name} = await RabbitMQClient.createSender<MyRPCSendersReceivers>(Queues.REFRESH);
+const channel = await RabbitMQClient.createChannel<DefinitionsRPC>();
 
-// response is automatically typed { error: boolean }
-const response = await queue.sendRPC({delay: 12});
+const senderOne = await channel.createSender(enumOne.ONE_ONE);
+const senderTwo = await channel.createSender(enumTwo.TWO_TWO);
+
+// must be Command<'cmd_a', { a: string, b: number }> | Command<'cmd_b', { c: string, d: number }>
+const responseOne1 = await senderOne.sendRPC({ command: 'cmd_a', args: { a: 'hello', b: 12 } });
+const responseOne2 = await senderOne.sendRPC({ command: 'cmd_b', args: { c: 'world', d: 22 } });
+
+console.log(responseOne1); // SuccessReturn & { a: string }
+console.log(responseOne2); // SuccessReturn & { b: number }
+
+// must be number | string
+const responseTwo1 = await senderTwo.sendRPC('hello');
+const responseTwo2 = await senderTwo.sendRPC(12);
+
+console.log(responseTwo1); // string
+console.log(responseTwo2); // number
+
+await channel.close();
 ```
 ### Server
 ```typescript
-const { channel, queue, name } = await RabbitMQClient.createReceiverRPCJson<MyRPCSendersReceivers>(Queues.REFRESH, (message) => {
-  // must return { error: boolean }
-  return myRPCStuff(message.delay);
+const channel = await RabbitMQClient.createChannel<DefinitionsRPC>();
+
+// must return SuccessReturn & { a: string } | SuccessReturn & { b: number }
+await channel.createReceiverRPC(enumOne.ONE_TWO, (message) => {
+  switch (message.content.command) {
+    case 'cmd_c':
+      console.log(message.content); // Command<'cmd_c', { e: boolean, f: number }>
+      return {
+        error: false,
+        a: 'hello',
+      }
+
+    case 'cmd_d':
+      console.log(message.content); // Command<'cmd_d', { g: string, h: number }>
+      return {
+        error: false,
+        b: 12,
+      }
+  }
 });
+
+//must return string | number
+await channel.createReceiverRPC(enumTwo.TWO_ONE, (message) => {
+  console.log(message); // boolean | string
+  if (message.content === true || message.content === false) {
+    return 'success';
+  }
+  return 42;
+});
+
+await channel.close();
 ```

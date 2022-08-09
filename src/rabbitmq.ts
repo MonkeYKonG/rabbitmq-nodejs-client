@@ -18,18 +18,18 @@ type FunctionsIntersection<T extends Record<any, (...args: any) => any>> = {
 
 type KeyOf = string | number | symbol;
 
-interface BaseArgumentBody<Args = any, Return = any> {
+export interface ArgumentBody<Args = any, Return = any> {
   argument: Args;
   return: Return;
 }
-type BaseArgument<T extends KeyOf = string> = {
-  [k in T]: BaseArgumentBody<any, any>;
+type BaseArgument<T extends KeyOf = KeyOf> = {
+  [k in T]: ArgumentBody<any, any>;
 };
 type BaseArgumentRPC = {
-  [k: KeyOf]: BaseArgumentBody<any, any>;
+  [k: KeyOf]: ArgumentBody<any, any>;
 };
 
-type BaseArgumentComplete = BaseArgument<KeyOf> | [BaseArgumentBody, ...BaseArgumentBody[]];
+type BaseArgumentComplete = BaseArgument<KeyOf> | [ArgumentBody, ...ArgumentBody[]];
 
 type BaseArguments<
   T extends KeyOf,
@@ -46,7 +46,7 @@ type ToMap<T extends any[]> = {
 };
 
 export type MessagesDefinition<T extends BaseArgumentsComplete<string>> = {
-  [key in keyof T]: T[key] extends [BaseArgumentBody, ...BaseArgumentBody[]] ? ToMap<T[key]> : T[key];
+  [key in keyof T]: T[key] extends [ArgumentBody, ...ArgumentBody[]] ? ToMap<T[key]> : T[key];
 };
 
 type SendToQueueMessage = any;
@@ -60,7 +60,7 @@ type ParsedMessage<T> = Omit<amqp.Message, 'content'> & {
   content: T
 };
 
-type BaseSendFunction<T extends BaseArgumentBody> = (
+type BaseSendFunction<T extends ArgumentBody> = (
   message: T['argument'],
 ) => void;
 type BaseSendFunctions<
@@ -69,7 +69,7 @@ type BaseSendFunctions<
     [key in keyof Argument]: BaseSendFunction<Argument[key]>
   };
 
-type BaseSendRPCFunction<T extends BaseArgumentBody> = (
+type BaseSendRPCFunction<T extends ArgumentBody> = (
   message: T['argument'],
 ) => Promise<T['return']>;
 type BaseSendRPCFunctions<
@@ -149,7 +149,7 @@ interface IChannel<
       queueOptions?: amqp.Options.AssertQueue,
       consumeOptions?: amqp.Options.Consume,
     ) => Promise<[IExchange<key, Arguments[key]>, IQueue<key, Arguments[key]>]>;
-  }>
+  }>;
 
   assertQueue: <U extends keyof Arguments>(
     queueName: U,
@@ -175,7 +175,7 @@ interface IChannel<
   ) => Promise<void>;
   sendToQueue: <QueueName extends keyof Arguments>(
     queueName: QueueName,
-    message: SendToQueueMessage, // TODO: Better type?
+    message: SendToQueueMessage,
     options?: amqp.Options.Publish,
     checkQueue?: boolean,
   ) => void;

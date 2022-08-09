@@ -1,4 +1,4 @@
-import RabbitMQClient, { MessagesDefinition } from "../src/rabbitmq";
+import RabbitMQClient, { ArgumentBody, MessagesDefinition } from "../src/rabbitmq";
 
 enum enumOne {
   ONE_ONE = 'one_one',
@@ -17,36 +17,24 @@ type Command<T extends string = string, U = any> = {
 
 type MessageTypeOne = {
   [enumOne.ONE_ONE]: [
-    {
-      argument: Command<'hey', { a: string, b: number }>,
-      return: void,
-    },
-    {
-      argument: Command<'salut', { c: string, d: number }>,
-      return: void,
-    },
+    ArgumentBody<Command<'cmd_a', { a: string, b: number }>, void>,
+    ArgumentBody<Command<'cmd_b', { c: string, d: number }>, void>,
   ];
   [enumOne.ONE_TWO]: [
-    {
-      argument: Command<'Earth', { e: boolean, f: number }>,
-      return: void,
-    },
-    {
-      argument: Command<'Terre', { g: string, h: number }>,
-      return: void,
-    },
+    ArgumentBody<Command<'cmd_c', { e: boolean, f: number }>, void>,
+    ArgumentBody<Command<'cmd_d', { g: string, h: number }>, void>,
   ];
 }
 
 
 type MessageTypeTwo = {
   [enumTwo.TWO_ONE]: {
-    'marco': { argument: boolean, return: void },
-    'james': { argument: string, return: void }
+    'cmd_name_a': ArgumentBody<boolean, void>,
+    'cmd_name_b': ArgumentBody<string, void>,
   };
   [enumTwo.TWO_TWO]: {
-    'pollo': { argument: number, return: void },
-    'cook': { argument: string, return: void }
+    'cmd_name_b': ArgumentBody<number, void>,
+    'cmd_name_c': ArgumentBody<string, void>,
   };
 }
 
@@ -63,8 +51,8 @@ const main = async () => {
     enumTwo.TWO_TWO,
   );
 
-  senderOne.send({ command: 'hey', args: { a: 'gello', b: 23 } });
-  senderOne.send({ command: 'salut', args: { c: 'gello', d: 23 } });
+  senderOne.send({ command: 'cmd_a', args: { a: 'gello', b: 23 } });
+  senderOne.send({ command: 'cmd_b', args: { c: 'gello', d: 23 } });
   senderTwo.send('hello');
   senderTwo.send(12);
 
@@ -91,7 +79,7 @@ const main2 = async () => {
     'fanout',
   );
 
-  publisherOne.publish({ command: 'Earth', args: { e: true, f: 54 } });
+  publisherOne.publish({ command: 'cmd_c', args: { e: true, f: 54 } });
   publisherTwo.publish('hello');
   publisherTwo.publish(false);
 
@@ -116,69 +104,67 @@ type ErrorReturn<T extends boolean> = { error: T };
 type SuccessReturn = ErrorReturn<false>;
 type FailureReturn = ErrorReturn<true>;
 
-type MessageTypeOneRPC = {
-  [enumOne.ONE_ONE]: {
-    'hello': {
-      argument: Command<'hey', { a: string, b: number }>,
-      return: SuccessReturn,
-    },
-    'bonjour': {
-      argument: Command<'salut', { c: string, d: number }>,
-      return: FailureReturn,
-    },
-  };
-  [enumOne.ONE_TWO]: {
-    'World': {
-      argument: Command<'Earth', { e: boolean, f: number }>,
-      return: FailureReturn,
-    },
-    'Monde': {
-      argument: Command<'Terre', { g: string, h: number }>,
-      return: SuccessReturn,
-    },
-  };
+type MessageTypeRPCOne = {
+  [enumOne.ONE_ONE]: [
+    ArgumentBody<Command<'cmd_a', { a: string, b: number }>, SuccessReturn & { a: string }>,
+    ArgumentBody<Command<'cmd_b', { c: string, d: number }>, SuccessReturn & { b: number }>,
+  ];
+  [enumOne.ONE_TWO]: [
+    ArgumentBody<Command<'cmd_c', { e: boolean, f: number }>, SuccessReturn | FailureReturn>,
+    ArgumentBody<Command<'cmd_d', { g: string, h: number }>, FailureReturn & { message: string }>,
+  ];
 }
 
-type MessageTypeTwoRPC = {
+
+type MessageTypeRPCTwo = {
   [enumTwo.TWO_ONE]: {
-    'marco': { argument: boolean, return: FailureReturn & { a: boolean } },
-    'james': { argument: string, return: FailureReturn & { b: string } }
+    'cmd_name_a': ArgumentBody<boolean, string>,
+    'cmd_name_b': ArgumentBody<string, number>,
   };
   [enumTwo.TWO_TWO]: {
-    'pollo': { argument: number, return: SuccessReturn & { c: number } },
-    'cook': { argument: string, return: SuccessReturn & { d: string | number } }
+    'cmd_name_b': ArgumentBody<number, number>,
+    'cmd_name_c': ArgumentBody<string, string>,
   };
 }
 
-type ArgumentsRPC = MessageTypeOneRPC & MessageTypeTwoRPC;
+type ArgumentsRPC = MessageTypeRPCOne & MessageTypeRPCTwo;
+type DefinitionsRPC = MessagesDefinition<ArgumentsRPC>;
 
 const main3 = async () => {
-  const channel = await RabbitMQClient.createChannel<ArgumentsRPC>();
+  const channel = await RabbitMQClient.createChannel<DefinitionsRPC>();
 
   const senderOne = await channel.createSender(enumOne.ONE_ONE);
   const senderTwo = await channel.createSender(enumTwo.TWO_TWO);
 
-  const responseOne1 = await senderOne.sendRPC({ command: 'hey', args: { a: 'gello', b: 12 } });
-  const responseOne2 = await senderOne.sendRPC({ command: 'salut', args: { c: 'hello', d: 22 } });
+  const responseOne1 = await senderOne.sendRPC({ command: 'cmd_a', args: { a: 'gello', b: 12 } });
+  const responseOne2 = await senderOne.sendRPC({ command: 'cmd_b', args: { c: 'hello', d: 22 } });
   const responseTwo1 = await senderTwo.sendRPC('hello');
   const responseTwo2 = await senderTwo.sendRPC(12);
 
-  await channel.createReceiver(enumOne.ONE_TWO, (message) => {
-    message.content;
+  await channel.createReceiverRPC(enumOne.ONE_TWO, (message) => {
     switch (message.content.command) {
-      case 'Earth':
-        return { error: true };
+      case 'cmd_c':
+        return {
+          error: false,
+          a: 'hello',
+        }
 
-      case 'Terre':
-        return { error: true }; // TODO: Must be false
+      case 'cmd_d':
+        return {
+          error: false,
+          b: 12,
+        }
     }
   });
 
-  await channel.createReceiver(enumTwo.TWO_ONE, (message) => {
-    message.content;
-
-    return { error: true, b: 'true' };
+  await channel.createReceiverRPC(enumTwo.TWO_ONE, (message) => {
+    if (message.content === true || message.content === false) {
+      return 'success';
+    }
+    return 42;
   });
+
+  await channel.close();
 };
 
 const main4 = async () => {
@@ -201,7 +187,9 @@ const main4 = async () => {
     message.content;
 
     return message.content;
-  })
+  });
+
+  await channel.close();
 };
 
 RabbitMQClient.connect().then(() => {
