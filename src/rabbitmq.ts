@@ -470,7 +470,9 @@ class Channel<Arguments extends BaseArguments<keyof Arguments>> implements IChan
   ) => new Promise((resolve) => {
     const strExchangeName = exchangeName.toString();
 
-    this.checkExchangeAlreadyExists(strExchangeName);
+    if (this.isExistingExchange(strExchangeName)) {
+      return this.exchanges[strExchangeName];
+    }
 
     this.channel.assertExchange(strExchangeName, exchangeType, options, (error, exchange) => {
       if (error) throw error;
