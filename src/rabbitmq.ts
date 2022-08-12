@@ -93,7 +93,7 @@ type BasePublishFunctions<
     ) => void;
   };
 
-interface IQueue<QueueName extends KeyOf, Argument extends BaseArgument> {
+export interface IQueue<QueueName extends KeyOf, Argument extends BaseArgument> {
   channel: IChannel<{ [key in QueueName]: Argument }>;
   name: QueueName;
   send: FunctionsIntersection<BaseSendFunctions<Argument>>;
@@ -104,13 +104,13 @@ interface IQueue<QueueName extends KeyOf, Argument extends BaseArgument> {
   ) => Promise<void>;
 }
 
-interface IExchange<QueueName extends KeyOf, Argument extends BaseArgument> {
+export interface IExchange<QueueName extends KeyOf, Argument extends BaseArgument> {
   channel: IChannel<{ [key in QueueName]: Argument }>;
   name: QueueName;
   publish: FunctionsIntersection<BasePublishFunctions<Argument>>;
 }
 
-interface IChannel<
+export interface IChannel<
   Arguments extends BaseArguments<keyof Arguments>,
   > {
   channel: amqp.Channel;
