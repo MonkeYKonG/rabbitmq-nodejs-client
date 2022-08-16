@@ -448,8 +448,10 @@ class Channel<Arguments extends BaseArguments<keyof Arguments>> implements IChan
   ) => new Promise((resolve) => {
     const strQueueName = queueName.toString();
 
-    this.checkQueueAlreadyExists(strQueueName);
-
+    if (this.isExistingQueue(strQueueName)) {
+      resolve(this.queues[strQueueName]);
+      return;
+    }
     this.channel.assertQueue(strQueueName, options, (error, queue) => {
       if (error) throw error;
 
@@ -471,7 +473,8 @@ class Channel<Arguments extends BaseArguments<keyof Arguments>> implements IChan
     const strExchangeName = exchangeName.toString();
 
     if (this.isExistingExchange(strExchangeName)) {
-      return this.exchanges[strExchangeName];
+      resolve(this.exchanges[strExchangeName]);
+      return;
     }
 
     this.channel.assertExchange(strExchangeName, exchangeType, options, (error, exchange) => {
